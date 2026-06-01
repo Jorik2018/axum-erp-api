@@ -1,4 +1,7 @@
+//src/service/company_service.rs
 use crate::{
+    //cannot find `entity` in `crate`
+//could not find `entity` in the crate root
     entity::company::{Company},
     repository::company_repository::CompanyRepository,
 };

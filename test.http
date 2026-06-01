@@ -1,0 +1,31 @@
+### Health Check
+GET http://localhost:8080/api/healthcheck
+
+### List
+GET http://localhost:3000/companies
+authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuY29tL2lzc3VlciIsInVwbiI6Impkb2VAcXVhcmt1cy5pbyIsImdyb3VwcyI6WyJVc2VyIiwiQWRtaW4iXSwidWlkIjoxLCJ1c2VyIjoiYWRtaW4iLCJiaXJ0aGRhdGUiOiIyMDAxLTA3LTEzIiwiaWF0IjoxNzc4MzQwOTkyLCJleHAiOjE3NzgzNDQ1OTIsImp0aSI6ImY2MzQ4YzRlLTEzZDYtNDNmNC1iNDU3LTMzMGZhNDNlNmM0YiJ9.feSsYfJ6qL5vjhCkTDzuMarIdJZVZBZxYtKZVMONvY8inlV0qVon5gr4ZpnSNV7IyJzW9BrzHW6rKyneP0wCIZKK6SbFHYYzehDIHEWeY8CtcEQUKX57sR4hC4CyTvzCrTVJVfutY6KjBp6g5SU7j4kdZo5DEDD6BaLhgtX7p2l85V82WvODl7-pYt0R4-8BcNTxMgSTIJ2YHzkfZQWNvKbrakmd1JsejqkNEu2FJiHlZSyU8cVqSb5WqPEwl9XgtURRrRNEh1norEFVdR1WqkXbNmpYbZPCZAvE0SEMPgqBDYcXhguffn9OHtIKGwDvQXsWbfeVLElnNVanuV-2CQ
+
+
+### Create
+POST http://localhost:8080/api/notes
+content-type: application/json
+
+{
+    "title": "a note",
+    "content": "here some reminder, mention @raditzlawliet",
+    "is_published": true
+}
+
+### Read
+GET http://localhost:8080/api/notes/05406abb-187e-4f00-9399-07872a6677f6
+
+### Update
+PATCH http://localhost:8080/api/notes/05406abb-187e-4f00-9399-07872a6677f6
+content-type: application/json
+
+{
+    "content": "here some reminder, mention @raditzlawliet share and like"
+}
+
+### Delete
+DELETE http://localhost:8080/api/notes/05406abb-187e-4f00-9399-07872a6677f6
