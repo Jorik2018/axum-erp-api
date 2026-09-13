@@ -272,12 +272,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Sin /api porque Nginx ya lo pone
         //
         .nest(
-            "/warrants",
+            "/warrant",
             warrant_routes(),
         )
 
         .nest(
-            "/warrant-types",
+            "/warrant-type",
             warrant_type_routes(),
         )
 
