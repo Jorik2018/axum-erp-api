@@ -232,8 +232,7 @@ pipeline {
                     echo Starting service
                     echo ==========================================
 
-                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" start ^
-                        --service-id "%SERVICE_ID%"
+                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" start "%SERVICE_ID%"
 
                     if errorlevel 1 (
                         echo ERROR: Could not start service
