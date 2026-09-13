@@ -306,6 +306,20 @@ stage('Reinstall Windows Service') {
     }
 }
 
+stage('Clean Service Logs') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Cleaning service logs
+            echo ==========================================
+
+            del /Q "%DEPLOY_DIR%\\*.log" 2>nul
+
+            echo Logs cleaned.
+        '''
+    }
+}
+
 stage('Start Service') {
     steps {
         bat '''
