@@ -15,7 +15,7 @@ pipeline {
 
         PORT = '8085'
 
-        DEPLOY_DIR = 'D:\\microservice\\axum-treasury-api'
+        DEPLOY_DIR = 'D:\\microservices\\axum-treasury-api'
     
     CARGO_EXE_NAME = 'axum-erp-api.exe'
     EXE_NAME = 'axum-treasury-api.exe'
@@ -214,6 +214,7 @@ pipeline {
                             --description "%SERVICE_DESCRIPTION%" ^
                             --type rust ^
                             --env "PORT=%PORT%" ^
+                            --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
                             --executable "%EXE_NAME%"
 
                 if errorlevel 1 (
