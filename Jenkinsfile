@@ -185,84 +185,124 @@ pipeline {
                 '''
             }
         }
+stage('Service Manager Help') {
+    steps {
+        bat '''
+            "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
+        '''
+    }
+}
 
-        stage('Service Manager Help') {
-            steps {
-                bat '''
-                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
-                '''
-            }
-        }
-        
-        stage('Configure Service') {
-            steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'VAULT_TOKEN',
-                        variable: 'VAULT_TOKEN'
-                    )
-                ]) {
-                    bat '''
-                        echo ==========================================
-                        echo Configuring Windows service
-                        echo ==========================================
+stage('Configure Service') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'VAULT_TOKEN',
+                variable: 'VAULT_TOKEN'
+            )
+        ]) {
+            bat '''
+                echo ==========================================
+                echo Configuring Windows service
+                echo ==========================================
 
-                        "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
-                            "%SERVICE_ID%" ^
-                            "%DEPLOY_DIR%" ^
-                            --name "%SERVICE_NAME%" ^
-                            --description "%SERVICE_DESCRIPTION%" ^
-                            --type rust ^
-                            --env "PORT=%PORT%" ^
-                            --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
-                            --executable "%EXE_NAME%"
+                "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
+                    "%SERVICE_ID%" ^
+                    "%DEPLOY_DIR%" ^
+                    --name "%SERVICE_NAME%" ^
+                    --description "%SERVICE_DESCRIPTION%" ^
+                    --type rust ^
+                    --env "PORT=%PORT%" ^
+                    --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
+                    --executable "%EXE_NAME%"
 
                 if errorlevel 1 (
                     echo ERROR: Service configuration failed
                     exit /B 1
-                        )
-                    '''
-                }
-            }
+                )
+            '''
         }
+    }
+}
 
-        stage('Start Service') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Starting service
-                    echo ==========================================
+stage('Install Windows Service') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Installing Windows service
+            echo ==========================================
 
-                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" start "%SERVICE_ID%"
+            cd /d "%DEPLOY_DIR%"
 
-                    if errorlevel 1 (
-                        echo ERROR: Could not start service
-                        exit /B 1
-                    )
-                '''
-            }
-        }
+            sc query "%SERVICE_ID%" >nul 2>&1
 
-        stage('Verify Service') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Checking Windows service
-                    echo ==========================================
+            if errorlevel 1 (
+                echo Service not installed. Installing...
+                service.exe install
 
-                    sc query "%SERVICE_ID%"
+                if errorlevel 1 (
+                    echo ERROR: Could not install service
+                    exit /B 1
+                )
+            ) else (
+                echo Service already installed.
+            )
+        '''
+    }
+}
 
-                    sc query "%SERVICE_ID%" | findstr /I "RUNNING"
+stage('Start Service') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Starting service
+            echo ==========================================
 
-                    if errorlevel 1 (
-                        echo ERROR: Service is not running.
-                        exit /B 1
-                    )
+            cd /d "%DEPLOY_DIR%"
 
-                    echo Service is RUNNING.
-                '''
-            }
-        }
+            service.exe start
+
+            if errorlevel 1 (
+                echo ERROR: Could not start service
+                exit /B 1
+            )
+        '''
+    }
+}
+
+stage('Verify Service') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Checking Windows service
+            echo ==========================================
+
+            sc query "%SERVICE_ID%"
+
+            sc query "%SERVICE_ID%" | findstr /I "RUNNING"
+
+            if errorlevel 1 (
+                echo ERROR: Service is not running.
+                exit /B 1
+            )
+
+            echo Service is RUNNING.
+
+            echo ==========================================
+            echo Checking Rust API port
+            echo ==========================================
+
+            netstat -ano | findstr ":%PORT%"
+
+            if errorlevel 1 (
+                echo ERROR: Rust API is not listening on port %PORT%
+                exit /B 1
+            )
+
+            echo Rust API is listening on port %PORT%.
+        '''
+    }
+}
     }
 
     post {
