@@ -49,5 +49,5 @@ pub struct Warrant {
 
     pub upload: Option<bool>,
 
-    pub diff: Option<f64>,
+    pub diff: Option<i64>,
 }
