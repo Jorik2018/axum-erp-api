@@ -36,17 +36,51 @@ stage('Verify Vault Token') {
                 variable: 'VAULT_TOKEN'
             )
         ]) {
-            bat '''
-                echo ==========================================
-                echo Verifying Vault token
-                echo ==========================================
+            powershell '''
+                Write-Host "=========================================="
+                Write-Host "Verifying Vault token"
+                Write-Host "=========================================="
 
-                "%PYTHON_HOME%\\python.exe" -c "import os, urllib.request; req=urllib.request.Request('http://127.0.0.1:8200/v1/auth/token/lookup-self', headers={'X-Vault-Token': os.environ['VAULT_TOKEN']}); r=urllib.request.urlopen(req); print(r.status); print(r.read().decode())"
+                $headers = @{
+                    "X-Vault-Token" = $env:VAULT_TOKEN
+                }
 
-                if errorlevel 1 (
-                    echo ERROR: Vault token verification failed
-                    exit /B 1
-                )
+                try {
+                    $response = Invoke-WebRequest `
+                        -Uri "http://127.0.0.1:8200/v1/auth/token/lookup-self" `
+                        -Headers $headers `
+                        -Method GET `
+                        -UseBasicParsing
+
+                    Write-Host "HTTP Status:" $response.StatusCode
+                    Write-Host $response.Content
+                }
+                catch {
+                    $statusCode = $null
+                    $body = $null
+
+                    if ($_.Exception.Response) {
+                        try {
+                            $statusCode = [int]$_.Exception.Response.StatusCode
+                        }
+                        catch {}
+
+                        try {
+                            $reader = New-Object System.IO.StreamReader(
+                                $_.Exception.Response.GetResponseStream()
+                            )
+                            $body = $reader.ReadToEnd()
+                            $reader.Close()
+                        }
+                        catch {}
+                    }
+
+                    Write-Host "HTTP Status:" $statusCode
+                    Write-Host "Vault response:"
+                    Write-Host $body
+
+                    throw "Vault token verification failed"
+                }
             '''
         }
     }
