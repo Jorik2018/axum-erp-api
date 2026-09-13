@@ -268,6 +268,7 @@ stage('Configure Service') {
                     --type rust ^
                     --env "PORT=%PORT%" ^
                     --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
+                    --env "JWT_PUBLIC_KEY=D:\\java\\publicKey.pem" ^
                     --executable "%EXE_NAME%"
 
                 if errorlevel 1 (
