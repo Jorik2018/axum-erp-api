@@ -53,33 +53,29 @@ stage('Verify Vault Token') {
                         -UseBasicParsing
 
                     Write-Host "HTTP Status:" $response.StatusCode
+                    Write-Host "Vault response:"
                     Write-Host $response.Content
                 }
                 catch {
-                    $statusCode = $null
-                    $body = $null
+                    Write-Host "HTTP request failed"
 
                     if ($_.Exception.Response) {
                         try {
-                            $statusCode = [int]$_.Exception.Response.StatusCode
-                        }
-                        catch {}
-
-                        try {
-                            $reader = New-Object System.IO.StreamReader(
-                                $_.Exception.Response.GetResponseStream()
-                            )
-                            $body = $reader.ReadToEnd()
-                            $reader.Close()
+                            Write-Host "HTTP Status:" ([int]$_.Exception.Response.StatusCode)
                         }
                         catch {}
                     }
 
-                    Write-Host "HTTP Status:" $statusCode
                     Write-Host "Vault response:"
-                    Write-Host $body
 
-                    throw "Vault token verification failed"
+                    if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+                        Write-Host $_.ErrorDetails.Message
+                    }
+                    else {
+                        Write-Host $_.Exception.Message
+                    }
+
+                    exit 1
                 }
             '''
         }
