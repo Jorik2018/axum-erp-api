@@ -81,7 +81,7 @@ pub async fn list_range(
 ) -> Result<PagedWarrants, ApiError> {
     let mut qb = QueryBuilder::<MySql>::new(
         "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, \
-         warrant_type_id, process_type, fecha_registro, fecha_vencimiento, \
+         warrant_type_id, process_type, fecha_registro, fecha_vencimiento,fecha_emision, \
          fecha_renovacion, canceled, upload, renovated, total,provider_id, \
          extension, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
          FROM warrant"
