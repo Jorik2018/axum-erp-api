@@ -255,15 +255,29 @@ stage('Start Service') {
     steps {
         bat '''
             echo ==========================================
+            echo Windows service configuration
+            echo ==========================================
+
+            sc qc "%SERVICE_ID%"
+
+            echo ==========================================
             echo Starting service
             echo ==========================================
 
-            cd /d "%DEPLOY_DIR%"
-
-            service.exe start
+            sc start "%SERVICE_ID%"
 
             if errorlevel 1 (
+                echo.
+                echo ==========================================
                 echo ERROR: Could not start service
+                echo ==========================================
+
+                sc query "%SERVICE_ID%"
+
+                echo.
+                echo WinSW files:
+                dir "%DEPLOY_DIR%"
+
                 exit /B 1
             )
         '''
