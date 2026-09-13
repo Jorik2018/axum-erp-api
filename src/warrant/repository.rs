@@ -72,7 +72,10 @@ pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, 
     Ok(PagedWarrants { data, size: total })
 }
 
-fn apply_filters(qb: &mut QueryBuilder<'_, MySql>, f: &WarrantFilter) {
+fn apply_filters<'a>(
+    qb: &mut QueryBuilder<'a, MySql>,
+    f: &'a WarrantFilter,
+) {
     qb.push(" WHERE canceled = 0 ");
 
     if let Some(expediente) = &f.expediente {

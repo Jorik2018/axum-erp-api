@@ -1,78 +1,238 @@
+mod auth;
 mod db;
 mod entity;
 mod repository;
 mod service;
 mod controller;
+mod vault;
 mod handler;
 mod model;
 mod schema;
 mod state;
 mod session;
 mod middleware;
-use axum::middleware::from_fn_with_state;
-use std::sync::Arc;
+mod warrant;
+mod warrant_type;
+mod error;
+
+use std::{
+    env,
+    net::SocketAddr,
+    sync::Arc,
+};
+use state::AppState;
 use axum::{
-    routing::{get},
+    middleware::from_fn_with_state,
+    routing::get,
     Router,
 };
+
 use axum::http::{
-    header::{CONTENT_TYPE, AUTHORIZATION, ACCEPT}, 
-    Method
+    header::{
+        ACCEPT,
+        AUTHORIZATION,
+        CONTENT_TYPE,
+    },
+    Method,
 };
-use tower_http::cors::{CorsLayer};
+
+use sqlx::mysql::MySqlPoolOptions;
+
+use tower_http::{
+    cors::CorsLayer,
+    trace::TraceLayer,
+};
+
 use dotenv::dotenv;
-use state::AppState;
+
+use auth::JwtService;
+
 use controller::company_controller::*;
+
 use handler::note_handler::*;
 use handler::region_handler::*;
+
 use repository::company_repository::CompanyRepository;
+
 use service::company_service::CompanyService;
-use crate::middleware::auth::auth_middleware;
-use crate::{service::session_service::SessionService, session::create_redis_pool};
+
+use warrant::routes::warrant_routes;
+use warrant_type::routes::warrant_type_routes;
+
+use crate::{
+    middleware::auth::auth_middleware,
+    service::session_service::SessionService,
+    session::create_redis_pool,
+};
 
 #[tokio::main]
-async fn main() {
-
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    let database_url =std::env::var("DATABASE_URL").expect("DATABASE_URL must set");
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+        )
+        .init();
 
-    let pool = db::create_pool(&database_url).await;
+    //
+    // Vault
+    //
+    let vault_addr = env::var("VAULT_ADDR")
+        .unwrap_or_else(|_| {
+            "http://127.0.0.1:8200".to_string()
+        });
 
-    let repo = CompanyRepository::new(pool.clone());
-    
-    let service = Arc::new(CompanyService::new(repo));
+    let vault_token = env::var("VAULT_TOKEN")
+        .expect("VAULT_TOKEN must be set");
 
-    let redis_url = "redis://default:VGzseUUNTiwcpycer1cQnHyR8YICn3Xv@redis-16106.crce219.us-east-1-4.ec2.cloud.redislabs.com:16106";
-    
-    let redis_pool = create_redis_pool(redis_url).await;
+    //
+    // Database from Vault
+    //
+    let database_url = vault::get_secret(
+        &vault_addr,
+        &vault_token,
+        "global",
+        "DATABASE_URL",
+    )
+    .await?;
 
-    let session_service = SessionService::new(redis_pool);
+    let db = MySqlPoolOptions::new()
+        .max_connections(10)
+        .connect(&database_url)
+        .await?;
 
-    let app_state = Arc::new(AppState {
-        company_service: service,
-        session_service,
-        db: pool
-    });
+    //
+    // Redis from Vault
+    //
+    let redis_url = vault::get_secret(
+        &vault_addr,
+        &vault_token,
+        "global",
+        "REDIS_URL",
+    )
+    .await?;
 
+    let redis_pool = create_redis_pool(
+        &redis_url
+    )
+    .await;
+
+    let session_service =
+        SessionService::new(redis_pool);
+
+    //
+    // JWT
+    //
+    // Por ahora desde archivo/env.
+    // Luego lo pasas a Vault también.
+    //
+    let public_key_path = env::var("JWT_PUBLIC_KEY")
+        .unwrap_or_else(|_| {
+            "keys/publicKey.pem".to_string()
+        });
+
+    let issuer = env::var("JWT_ISSUER").ok();
+
+    let public_key = std::fs::read(
+        public_key_path
+    )?;
+
+    let jwt = Arc::new(
+        JwtService::new(
+            &public_key,
+            issuer,
+        )?
+    );
+
+    //
+    // Company service
+    //
+    let repo = CompanyRepository::new(
+        db.clone()
+    );
+
+    let company_service = Arc::new(
+        CompanyService::new(repo)
+    );
+
+    //
+    // App state
+    //
+    let app_state = Arc::new(
+        AppState {
+            db: db.clone(),
+            jwt,
+            company_service,
+            session_service,
+        }
+    );
+
+    //
+    // CORS
+    //
     let cors = CorsLayer::new()
-        //.allow_origin(Any)
-        //.allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+        ])
         .allow_credentials(true)
-        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+        .allow_headers([
+            AUTHORIZATION,
+            ACCEPT,
+            CONTENT_TYPE,
+        ]);
 
+    //
+    // Protected routes
+    //
     let protected_routes = Router::new()
-        .route("/companies", get(get_all).post(create))
-        .layer(from_fn_with_state(app_state.clone(), auth_middleware));
+        .route(
+            "/companies",
+            get(get_all)
+                .post(create),
+        )
+        .layer(
+            from_fn_with_state(
+                app_state.clone(),
+                auth_middleware,
+            )
+        );
 
+    //
+    // Main router
+    //
     let app = Router::new()
         .merge(protected_routes)
-        .route("/companies/{id}", get(get_by_id).put(update).delete(delete))
-        .route("/healthcheck", get(health_check_handler))
-        .nest("/notes",
+
+        .route(
+            "/companies/{id}",
+            get(get_by_id)
+                .put(update)
+                .delete(delete),
+        )
+
+        .route(
+            "/health",
+            get(|| async { "ok" }),
+        )
+
+        .route(
+            "/healthcheck",
+            get(health_check_handler),
+        )
+
+        .nest(
+            "/notes",
             Router::new()
-                .route("/", get(note_list_handler).post(create_note_handler))
+                .route(
+                    "/",
+                    get(note_list_handler)
+                        .post(create_note_handler),
+                )
                 .route(
                     "/{id}",
                     get(get_note_handler)
@@ -80,24 +240,87 @@ async fn main() {
                         .delete(delete_note_handler),
                 ),
         )
-        
-        .nest("/region",
-            Router::new().route("/{from}/{limit}", get(region_list_handler)),
+
+        .nest(
+            "/region",
+            Router::new()
+                .route(
+                    "/{from}/{limit}",
+                    get(region_list_handler),
+                ),
         )
-        .nest("/province",
-            Router::new().route("/{from}/{limit}", get(province_list_handler)),
+
+        .nest(
+            "/province",
+            Router::new()
+                .route(
+                    "/{from}/{limit}",
+                    get(province_list_handler),
+                ),
         )
-        .nest("/district",
-            Router::new().route("/{from}/{limit}", get(district_list_handler)),
+
+        .nest(
+            "/district",
+            Router::new()
+                .route(
+                    "/{from}/{limit}",
+                    get(district_list_handler),
+                ),
         )
-        .with_state(app_state).layer(cors);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .unwrap();
+        //
+        // Sin /api porque Nginx ya lo pone
+        //
+        .nest(
+            "/warrants",
+            warrant_routes(),
+        )
 
-    println!("Server running on :3000");
+        .nest(
+            "/warrant-types",
+            warrant_type_routes(),
+        )
 
-    axum::serve(listener, app).await.unwrap();
+        .layer(cors)
+        .layer(
+            TraceLayer::new_for_http()
+        )
+        .with_state(app_state);
 
+    //
+    // Server
+    //
+    let host = env::var("APP_HOST")
+        .unwrap_or_else(|_| {
+            "0.0.0.0".to_string()
+        });
+
+    let port = env::var("APP_PORT")
+        .unwrap_or_else(|_| {
+            "3000".to_string()
+        })
+        .parse::<u16>()?;
+
+    let addr: SocketAddr =
+        format!("{host}:{port}")
+            .parse()?;
+
+    let listener =
+        tokio::net::TcpListener::bind(
+            addr
+        )
+        .await?;
+
+    tracing::info!(
+        "Server listening on {}",
+        addr
+    );
+
+    axum::serve(
+        listener,
+        app,
+    )
+    .await?;
+
+    Ok(())
 }

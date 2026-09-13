@@ -1,10 +1,19 @@
-use axum::{extract::{Path, Query, State}, routing::{delete, get, post, put}, Json, Router};
+use axum::{
+    extract::{Path, Query, State},
+    routing::get,
+    Json,
+    Router,
+};
 use serde_json::{json, Value};
-
-use crate::{auth::AuthUser, error::ApiError, AppState};
+use std::sync::Arc;
+use crate::{
+    auth::AuthUser,
+    error::ApiError,
+    state::AppState,
+};
 use super::{dto::{NotificationResponse, SaveWarrant, WarrantFilter}, repository};
 
-pub fn warrant_routes() -> Router<AppState> {
+pub fn warrant_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/max-expediente", get(max_expediente))
@@ -13,7 +22,7 @@ pub fn warrant_routes() -> Router<AppState> {
 }
 
 async fn list(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(_claims): AuthUser,
     Query(filter): Query<WarrantFilter>,
 ) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
@@ -21,7 +30,7 @@ async fn list(
 }
 
 async fn find(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(_claims): AuthUser,
     Path(id): Path<i64>,
 ) -> Result<Json<super::model::Warrant>, ApiError> {
@@ -29,7 +38,7 @@ async fn find(
 }
 
 async fn create(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
     Json(input): Json<SaveWarrant>,
 ) -> Result<Json<super::model::Warrant>, ApiError> {
@@ -38,7 +47,7 @@ async fn create(
 }
 
 async fn update(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
     Path(id): Path<i64>,
     Json(input): Json<SaveWarrant>,
@@ -48,7 +57,7 @@ async fn update(
 }
 
 async fn remove(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, ApiError> {
@@ -58,7 +67,7 @@ async fn remove(
 }
 
 async fn max_expediente(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(_claims): AuthUser,
 ) -> Result<Json<Value>, ApiError> {
     let value = repository::max_expediente(&state.db).await?;
@@ -66,7 +75,7 @@ async fn max_expediente(
 }
 
 async fn notifications(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
 ) -> Result<Json<NotificationResponse>, ApiError> {
     require_tesoreria(&claims)?;
