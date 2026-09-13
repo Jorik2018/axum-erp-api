@@ -26,6 +26,8 @@ pipeline {
     }
 
     stages {
+
+
 stage('Verify Vault Token') {
     steps {
         withCredentials([
@@ -39,19 +41,14 @@ stage('Verify Vault Token') {
                 echo Verifying Vault token
                 echo ==========================================
 
-                set "VAULT_ADDR=http://127.0.0.1:8200"
-
-                echo Vault address: %VAULT_ADDR%
-                echo Checking token...
-
-                vault token lookup
+                curl -s -i ^
+                    -H "X-Vault-Token: %VAULT_TOKEN%" ^
+                    http://127.0.0.1:8200/v1/auth/token/lookup-self
 
                 if errorlevel 1 (
-                    echo ERROR: Vault token lookup failed
+                    echo ERROR: Could not connect to Vault
                     exit /B 1
                 )
-
-                echo Vault token is valid.
             '''
         }
     }
