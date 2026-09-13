@@ -185,6 +185,14 @@ stage('Deploy') {
         '''
     }
 }
+
+stage('Service Manager Help') {
+    steps {
+        bat '''
+            "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
+        '''
+    }
+}
         stage('Configure Service') {
             steps {
                 withCredentials([
