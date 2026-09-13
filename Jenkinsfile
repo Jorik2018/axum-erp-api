@@ -45,7 +45,21 @@ stage('Rust Environment') {
         '''
     }
 }
+stage('Update Rust') {
+    steps {
+        bat '''
+            set RUSTUP_HOME=C:\\Users\\Administrador.WIN-5UFR8AED4T8\\.rustup
+            set CARGO_HOME=C:\\Users\\Administrador.WIN-5UFR8AED4T8\\.cargo
+            set PATH=%CARGO_HOME%\\bin;%PATH%
 
+            rustup update stable
+            rustup default stable
+
+            rustc --version
+            cargo --version
+        '''
+    }
+}
         stage('Build') {
             steps {
                 bat '''
