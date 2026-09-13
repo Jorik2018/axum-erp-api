@@ -193,38 +193,40 @@ stage('Service Manager Help') {
         '''
     }
 }
+        
+        
         stage('Configure Service') {
-            steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'VAULT_TOKEN',
-                        variable: 'VAULT_TOKEN'
-                    )
-                ]) {
-                    bat '''
-                        echo ==========================================
-                        echo Configuring Windows service
-                        echo ==========================================
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'vault-token',
+                variable: 'VAULT_TOKEN'
+            )
+        ]) {
+            bat '''
+                echo ==========================================
+                echo Configuring Windows service
+                echo ==========================================
 
-                        "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
-                            --service-id "%SERVICE_ID%" ^
-                            --destination "%DEPLOY_DIR%" ^
-                            --service-name "%SERVICE_NAME%" ^
-                            --description "%SERVICE_DESCRIPTION%" ^
-                            --app-type rust ^
-                            --port %PORT% ^
-                            --vault-addr "%VAULT_ADDR%" ^
-                            --vault-token "%VAULT_TOKEN%" ^
-                            --executable "%EXE_NAME%"
+                "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
+                    "%SERVICE_ID%" ^
+                    "%DEPLOY_DIR%" ^
+                    --name "%SERVICE_NAME%" ^
+                    --description "%SERVICE_DESCRIPTION%" ^
+                    --type rust ^
+                    --port %PORT% ^
+                    --executable "%EXE_NAME%"
 
-                        if errorlevel 1 (
-                            echo ERROR: Service configuration failed
-                            exit /B 1
-                        )
-                    '''
-                }
-            }
+                if errorlevel 1 (
+                    echo ERROR: Service configuration failed
+                    exit /B 1
+                )
+            '''
         }
+    }
+}
+
+
 
         stage('Start Service') {
             steps {
