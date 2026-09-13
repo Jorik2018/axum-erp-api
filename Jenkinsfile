@@ -225,28 +225,28 @@ stage('Configure Service') {
     }
 }
 
-stage('Install Windows Service') {
+stage('Reinstall Windows Service') {
     steps {
         bat '''
             echo ==========================================
-            echo Installing Windows service
+            echo Reinstalling Windows service
             echo ==========================================
+
+            sc stop "%SERVICE_ID%" >nul 2>&1
+            sc delete "%SERVICE_ID%" >nul 2>&1
+
+            timeout /t 2 /nobreak >nul
 
             cd /d "%DEPLOY_DIR%"
 
-            sc query "%SERVICE_ID%" >nul 2>&1
+            service.exe install
 
             if errorlevel 1 (
-                echo Service not installed. Installing...
-                service.exe install
-
-                if errorlevel 1 (
-                    echo ERROR: Could not install service
-                    exit /B 1
-                )
-            ) else (
-                echo Service already installed.
+                echo ERROR: Could not install service
+                exit /B 1
             )
+
+            sc qc "%SERVICE_ID%"
         '''
     }
 }
