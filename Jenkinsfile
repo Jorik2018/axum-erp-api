@@ -189,7 +189,7 @@ stage('Deploy') {
             steps {
                 withCredentials([
                     string(
-                        credentialsId: 'vault-token',
+                        credentialsId: 'VAULT_TOKEN',
                         variable: 'VAULT_TOKEN'
                     )
                 ]) {
