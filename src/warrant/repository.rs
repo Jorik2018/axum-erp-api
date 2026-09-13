@@ -83,7 +83,7 @@ pub async fn list_range(
         "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, \
          warrant_type_id, process_type, fecha_registro, fecha_vencimiento, \
          fecha_renovacion, canceled, upload, renovated, total,provider_id, \
-         DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
+         extension, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
          FROM warrant"
     );
 
