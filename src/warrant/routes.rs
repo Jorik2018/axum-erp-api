@@ -18,6 +18,7 @@ pub fn warrant_routes() -> Router<Arc<AppState>> {
         .route("/", get(list).post(create))
         .route("/max-expediente", get(max_expediente))
         .route("/notifications", get(notifications))
+        .route("/{from}/{to}", get(list_range))
         .route("/{id}", get(find).put(update).delete(remove))
 }
 
