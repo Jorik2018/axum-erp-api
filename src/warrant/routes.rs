@@ -11,7 +11,22 @@ use crate::{
     error::ApiError,
     state::AppState,
 };
+use unicode_normalization::UnicodeNormalization;
 use super::{dto::{NotificationResponse, SaveWarrant, WarrantFilter}, repository};
+
+fn simplify_file_name(input: &str) -> String {
+    let ascii: String = input
+        .trim()
+        .nfd()
+        .filter(|c| c.is_ascii())
+        .filter(|c| *c != '*')
+        .collect();
+
+    ascii
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
 
 pub fn warrant_routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -42,15 +57,54 @@ async fn list_range(
         ));
     }
 
-    Ok(Json(
-        repository::list_range(
-            &state.db,
-            &filter,
-            from,
-            to,
-        )
-        .await?,
-    ))
+    let mut result = repository::list_range(
+        &state.db,
+        &filter,
+        from,
+        to,
+    )
+    .await?;
+
+    for warrant in &mut result.data {
+        if warrant.upload.unwrap_or(false) {
+            warrant.ext = Some(super::model::WarrantExt {
+                src: get_file_name(warrant),
+            });
+        }
+    }
+
+    Ok(Json(result))
+}
+
+fn get_file_name(warrant: &super::model::Warrant) -> String {
+    let id = warrant.id;
+
+    let expediente = warrant
+        .expediente
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+
+    let nro_carta = warrant
+        .nro_carta
+        .as_deref()
+        .unwrap_or_default();
+
+    let extension = warrant
+        .extension
+        .as_deref()
+        .unwrap_or_default();
+
+    let filename = format!(
+        "CF-{id:04}-{expediente}-{nro_carta}"
+    );
+
+    let filename = simplify_file_name(&filename);
+
+    if extension.is_empty() {
+        filename
+    } else {
+        format!("{filename}.{extension}")
+    }
 }
 
 async fn find(

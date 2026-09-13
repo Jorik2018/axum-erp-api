@@ -50,4 +50,13 @@ pub struct Warrant {
     pub upload: Option<bool>,
 
     pub diff: Option<i64>,
+    
+    #[sqlx(skip)]
+    pub ext: Option<WarrantExt>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarrantExt {
+    pub src: String,
 }
