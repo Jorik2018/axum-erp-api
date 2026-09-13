@@ -15,7 +15,7 @@ pipeline {
 
         PORT = '8085'
 
-        DEPLOY_DIR = 'D:\\services\\axum-treasury-api'
+        DEPLOY_DIR = 'D:\\microservice\\axum-treasury-api'
     
     CARGO_EXE_NAME = 'axum-erp-api.exe'
     EXE_NAME = 'axum-treasury-api.exe'
@@ -273,11 +273,11 @@ stage('Deploy') {
         }
 
         always {
-            archiveArtifacts(
-                artifacts: 'target/release/axum-treasury-api.exe',
-                fingerprint: true,
-                allowEmptyArchive: true
-            )
+archiveArtifacts(
+    artifacts: "target/release/${env.CARGO_EXE_NAME}",
+    fingerprint: true,
+    allowEmptyArchive: true
+)
         }
     }
 }
