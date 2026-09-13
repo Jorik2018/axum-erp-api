@@ -18,6 +18,7 @@ pub struct Warrant {
     pub fecha_vencimiento: Option<NaiveDateTime>,
     pub fecha_renovacion: Option<NaiveDateTime>,
     pub canceled: bool,
+    pub upload: bool,
     pub renovated: bool,
     pub diff: Option<i32>,
 }
