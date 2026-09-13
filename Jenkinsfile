@@ -159,8 +159,7 @@ stage('Build') {
                     echo Stopping service
                     echo ==========================================
 
-                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" stop ^
-                        --service-id "%SERVICE_ID%"
+                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" stop "%SERVICE_ID%"
                 '''
             }
         }
