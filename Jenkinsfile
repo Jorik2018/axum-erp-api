@@ -26,6 +26,36 @@ pipeline {
     }
 
     stages {
+stage('Verify Vault Token') {
+    steps {
+        withCredentials([
+            string(
+                credentialsId: 'VAULT_TOKEN',
+                variable: 'VAULT_TOKEN'
+            )
+        ]) {
+            bat '''
+                echo ==========================================
+                echo Verifying Vault token
+                echo ==========================================
+
+                set "VAULT_ADDR=http://127.0.0.1:8200"
+
+                echo Vault address: %VAULT_ADDR%
+                echo Checking token...
+
+                vault token lookup
+
+                if errorlevel 1 (
+                    echo ERROR: Vault token lookup failed
+                    exit /B 1
+                )
+
+                echo Vault token is valid.
+            '''
+        }
+    }
+}
 
         stage('Rust Environment') {
             steps {
