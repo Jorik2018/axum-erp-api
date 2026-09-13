@@ -90,31 +90,31 @@ pipeline {
             }
         }
 
-stage('Build') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Building Rust application
-            echo ==========================================
+        stage('Build') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Building Rust application
+                    echo ==========================================
 
-            cargo build --release
+                    cargo build --release
 
-            if errorlevel 1 (
-                echo ERROR: Cargo build failed
-                exit /B 1
-            )
+                    if errorlevel 1 (
+                        echo ERROR: Cargo build failed
+                        exit /B 1
+                    )
 
-            if not exist "target\\release\\%CARGO_EXE_NAME%" (
-                echo ERROR: Executable was not generated
-                echo Expected:
-                echo target\\release\\%CARGO_EXE_NAME%
-                exit /B 1
-            )
+                    if not exist "target\\release\\%CARGO_EXE_NAME%" (
+                        echo ERROR: Executable was not generated
+                        echo Expected:
+                        echo target\\release\\%CARGO_EXE_NAME%
+                        exit /B 1
+                    )
 
-            echo Build completed successfully.
-        '''
-    }
-}
+                    echo Build completed successfully.
+                '''
+            }
+        }
 
         stage('Test') {
             steps {
@@ -164,69 +164,66 @@ stage('Build') {
             }
         }
 
-stage('Deploy') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Deploying %APP_NAME%
-            echo ==========================================
+        stage('Deploy') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Deploying %APP_NAME%
+                    echo ==========================================
 
-            copy /Y ^
-                "target\\release\\%CARGO_EXE_NAME%" ^
-                "%DEPLOY_DIR%\\%EXE_NAME%"
+                    copy /Y ^
+                        "target\\release\\%CARGO_EXE_NAME%" ^
+                        "%DEPLOY_DIR%\\%EXE_NAME%"
 
-            if errorlevel 1 (
-                echo ERROR copying executable
-                exit /B 1
-            )
+                    if errorlevel 1 (
+                        echo ERROR copying executable
+                        exit /B 1
+                    )
 
-            echo Deployed:
-            echo %DEPLOY_DIR%\\%EXE_NAME%
-        '''
-    }
-}
+                    echo Deployed:
+                    echo %DEPLOY_DIR%\\%EXE_NAME%
+                '''
+            }
+        }
 
-stage('Service Manager Help') {
-    steps {
-        bat '''
-            "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
-        '''
-    }
-}
-        
+        stage('Service Manager Help') {
+            steps {
+                bat '''
+                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
+                '''
+            }
+        }
         
         stage('Configure Service') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'VAULT_TOKEN',
-                variable: 'VAULT_TOKEN'
-            )
-        ]) {
-            bat '''
-                echo ==========================================
-                echo Configuring Windows service
-                echo ==========================================
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'VAULT_TOKEN',
+                        variable: 'VAULT_TOKEN'
+                    )
+                ]) {
+                    bat '''
+                        echo ==========================================
+                        echo Configuring Windows service
+                        echo ==========================================
 
-                "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
-                    "%SERVICE_ID%" ^
-                    "%DEPLOY_DIR%" ^
-                    --name "%SERVICE_NAME%" ^
-                    --description "%SERVICE_DESCRIPTION%" ^
-                    --type rust ^
-                    --port %PORT% ^
-                    --executable "%EXE_NAME%"
+                        "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
+                            "%SERVICE_ID%" ^
+                            "%DEPLOY_DIR%" ^
+                            --name "%SERVICE_NAME%" ^
+                            --description "%SERVICE_DESCRIPTION%" ^
+                            --type rust ^
+                            --env "PORT=%PORT%" ^
+                            --executable "%EXE_NAME%"
 
                 if errorlevel 1 (
                     echo ERROR: Service configuration failed
                     exit /B 1
-                )
-            '''
+                        )
+                    '''
+                }
+            }
         }
-    }
-}
-
-
 
         stage('Start Service') {
             steps {
