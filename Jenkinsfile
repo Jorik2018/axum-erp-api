@@ -16,8 +16,9 @@ pipeline {
         PORT = '8085'
 
         DEPLOY_DIR = 'D:\\services\\axum-treasury-api'
-        EXE_NAME = 'axum-treasury-api.exe'
-
+    
+    CARGO_EXE_NAME = 'axum-erp-api.exe'
+    EXE_NAME = 'axum-treasury-api.exe'
         PYTHON_HOME = 'C:\\Tools\\Python312'
         SERVICE_MANAGER = 'D:\\wildfly\\bin\\service_manager.py'
 
@@ -89,31 +90,31 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Building Rust application
-                    echo ==========================================
+stage('Build') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Building Rust application
+            echo ==========================================
 
-                    cargo build --release
+            cargo build --release
 
-                    if errorlevel 1 (
-                        echo ERROR: Cargo build failed
-                        exit /B 1
-                    )
+            if errorlevel 1 (
+                echo ERROR: Cargo build failed
+                exit /B 1
+            )
 
-                    if not exist "target\\release\\%EXE_NAME%" (
-                        echo ERROR: Executable was not generated
-                        echo Expected:
-                        echo target\\release\\%EXE_NAME%
-                        exit /B 1
-                    )
+            if not exist "target\\release\\%CARGO_EXE_NAME%" (
+                echo ERROR: Executable was not generated
+                echo Expected:
+                echo target\\release\\%CARGO_EXE_NAME%
+                exit /B 1
+            )
 
-                    echo Build completed successfully.
-                '''
-            }
-        }
+            echo Build completed successfully.
+        '''
+    }
+}
 
         stage('Test') {
             steps {
@@ -164,28 +165,27 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Deploying %APP_NAME%
-                    echo ==========================================
+stage('Deploy') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Deploying %APP_NAME%
+            echo ==========================================
 
-                    copy /Y ^
-                        "target\\release\\%EXE_NAME%" ^
-                        "%DEPLOY_DIR%\\%EXE_NAME%"
+            copy /Y ^
+                "target\\release\\%CARGO_EXE_NAME%" ^
+                "%DEPLOY_DIR%\\%EXE_NAME%"
 
-                    if errorlevel 1 (
-                        echo ERROR copying executable
-                        exit /B 1
-                    )
+            if errorlevel 1 (
+                echo ERROR copying executable
+                exit /B 1
+            )
 
-                    echo Executable deployed:
-                    echo %DEPLOY_DIR%\\%EXE_NAME%
-                '''
-            }
-        }
-
+            echo Deployed:
+            echo %DEPLOY_DIR%\\%EXE_NAME%
+        '''
+    }
+}
         stage('Configure Service') {
             steps {
                 withCredentials([
