@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -14,8 +14,8 @@ pub struct Warrant {
     pub warrant_type_id: Option<i32>,
     pub process_type: Option<String>,
     pub fecha_registro: Option<NaiveDateTime>,
-    pub fecha_vencimiento: Option<NaiveDate>,
-    pub fecha_renovacion: Option<NaiveDate>,
+    pub fecha_vencimiento: Option<NaiveDateTime>,
+    pub fecha_renovacion: Option<NaiveDateTime>,
     pub canceled: bool,
     pub renovated: bool,
     pub diff: Option<i32>,
