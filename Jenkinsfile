@@ -41,19 +41,16 @@ stage('Verify Vault Token') {
                 echo Verifying Vault token
                 echo ==========================================
 
-                curl -s -i ^
-                    -H "X-Vault-Token: %VAULT_TOKEN%" ^
-                    http://127.0.0.1:8200/v1/auth/token/lookup-self
+                "%PYTHON_HOME%\\python.exe" -c "import os, urllib.request; req=urllib.request.Request('http://127.0.0.1:8200/v1/auth/token/lookup-self', headers={'X-Vault-Token': os.environ['VAULT_TOKEN']}); r=urllib.request.urlopen(req); print(r.status); print(r.read().decode())"
 
                 if errorlevel 1 (
-                    echo ERROR: Could not connect to Vault
+                    echo ERROR: Vault token verification failed
                     exit /B 1
                 )
             '''
         }
     }
 }
-
         stage('Rust Environment') {
             steps {
                 bat '''
