@@ -26,23 +26,25 @@ pipeline {
 
     stages {
 
-        stage('Environment') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Rust environment
-                    echo ==========================================
+stage('Rust Environment') {
+    steps {
+        bat '''
+            echo ==========================================
+            echo Rust environment
+            echo ==========================================
 
-                    where cargo
-                    cargo --version
+            whoami
 
-                    where rustc
-                    rustc --version
+            where rustup
+            where rustc
+            where cargo
 
-                    echo ==========================================
-                '''
-            }
-        }
+            rustup --version
+            rustc --version
+            cargo --version
+        '''
+    }
+}
 
         stage('Build') {
             steps {
