@@ -25,13 +25,25 @@ pub async fn get_secret(
     );
 
     let response = Client::new()
-        .get(url)
+        .get(&url)
         .header("X-Vault-Token", vault_token)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<VaultResponse>()
         .await?;
+
+    let status = response.status();
+    let body = response.text().await?;
+
+    if !status.is_success() {
+        return Err(format!(
+            "Vault request failed: status={}, url={}, body={}",
+            status,
+            url,
+            body
+        )
+        .into());
+    }
+
+    let response: VaultResponse = serde_json::from_str(&body)?;
 
     response
         .data
