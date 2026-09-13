@@ -72,6 +72,57 @@ pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, 
     Ok(PagedWarrants { data, size: total })
 }
 
+
+pub async fn list_range(
+    pool: &MySqlPool,
+    f: &WarrantFilter,
+    from: u64,
+    to: u64,
+) -> Result<PagedWarrants, ApiError> {
+    let mut qb = QueryBuilder::<MySql>::new(
+        "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, \
+         warrant_type_id, process_type, fecha_registro, fecha_vencimiento, \
+         fecha_renovacion, canceled, renovated, \
+         DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
+         FROM warrant"
+    );
+
+    apply_filters(&mut qb, f);
+
+    if f.order.as_deref() == Some("e") {
+        qb.push(" ORDER BY expediente DESC, fecha_vencimiento DESC ");
+    } else {
+        qb.push(" ORDER BY fecha_vencimiento DESC ");
+    }
+
+    let limit = to.saturating_sub(from);
+
+    qb.push(" LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(from);
+
+    let data = qb
+        .build_query_as::<Warrant>()
+        .fetch_all(pool)
+        .await?;
+
+    let mut count_qb =
+        QueryBuilder::<MySql>::new("SELECT COUNT(*) FROM warrant");
+
+    apply_filters(&mut count_qb, f);
+
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .fetch_one(pool)
+        .await?;
+
+    Ok(PagedWarrants {
+        data,
+        size: total,
+    })
+}
+
 fn apply_filters<'a>(
     qb: &mut QueryBuilder<'a, MySql>,
     f: &'a WarrantFilter,

@@ -30,6 +30,29 @@ async fn list(
     Ok(Json(repository::list(&state.db, &filter).await?))
 }
 
+async fn list_range(
+    State(state): State<Arc<AppState>>,
+    AuthUser(_claims): AuthUser,
+    Path((from, to)): Path<(u64, u64)>,
+    Query(filter): Query<WarrantFilter>,
+) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
+    if to <= from {
+        return Err(ApiError::BadRequest(
+            "`to` must be greater than `from`".into(),
+        ));
+    }
+
+    Ok(Json(
+        repository::list_range(
+            &state.db,
+            &filter,
+            from,
+            to,
+        )
+        .await?,
+    ))
+}
+
 async fn find(
     State(state): State<Arc<AppState>>,
     AuthUser(_claims): AuthUser,
