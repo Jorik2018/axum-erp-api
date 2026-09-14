@@ -27,6 +27,35 @@ pipeline {
 
     stages {
 
+stage('Check Vault Seal Status') {
+    steps {
+        powershell '''
+            $env:VAULT_ADDR = "http://127.0.0.1:8200"
+
+            Write-Host "Checking Vault seal status..."
+
+            $output = & "$env:VAULT_HOME\\vault.exe" status -format=json 2>$null
+
+            # vault status devuelve codigo != 0 cuando esta sealed
+            $global:LASTEXITCODE = 0
+
+            if (-not $output) {
+                throw "Vault is not responding."
+            }
+
+            $status = $output | ConvertFrom-Json
+
+            Write-Host "Initialized: $($status.initialized)"
+            Write-Host "Sealed     : $($status.sealed)"
+
+            if ($status.sealed -eq $true) {
+                throw "Vault is running but SEALED. Unseal Vault before validating the token."
+            }
+
+            Write-Host "Vault is unsealed and ready."
+        '''
+    }
+}
 
 stage('Verify Vault Token') {
     steps {
