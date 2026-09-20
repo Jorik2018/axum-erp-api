@@ -162,12 +162,10 @@ pub async fn list_range(
         }
     }
 
-    let limit = to.saturating_sub(from);
-
-    qb.push(" LIMIT ")
-        .push_bind(limit)
-        .push(" OFFSET ")
-        .push_bind(from);
+qb.push(" LIMIT ")
+    .push_bind(to)
+    .push(" OFFSET ")
+    .push_bind(from);
 
     let rows = qb
         .build_query_as::<WarrantRow>()
