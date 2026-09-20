@@ -105,19 +105,60 @@ pub async fn list_range(
     to: u64,
 ) -> Result<PagedWarrants, ApiError> {
     let mut qb = QueryBuilder::<MySql>::new(
-        "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad,confirmacion_banco, \
-         warrant_type_id, process_type, fecha_registro, fecha_vencimiento,fecha_emision,observacion, \
-         fecha_renovacion, canceled, upload, renovated, total,provider_id,status, \
-         extension, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
-         FROM warrant",
+        r#"
+        SELECT
+            w.id,
+            w.provider_id,
+            w.process_type,
+            w.extension,
+            w.proveedor,
+            w.expediente,
+            w.entidad,
+            w.numero,
+            w.obra,
+            w.warrant_type_id,
+            w.total,
+            w.fecha_renovacion,
+            w.nro_carta,
+            w.fecha_emision,
+            w.fecha_vencimiento,
+            w.fecha_registro,
+            w.observacion,
+            w.confirmacion_banco,
+            w.renovated,
+            w.status,
+            w.canceled,
+            w.upload,
+
+            DATEDIFF(
+                w.fecha_vencimiento,
+                CURDATE()
+            ) AS diff,
+
+            wt.id AS wt_id,
+            wt.name AS wt_name
+
+        FROM warrant w
+
+        LEFT JOIN warrant_type wt
+            ON wt.id = w.warrant_type_id
+        "#,
     );
 
     apply_filters(&mut qb, f);
 
-    if f.order.as_deref() == Some("e") {
-        qb.push(" ORDER BY expediente DESC, fecha_vencimiento DESC ");
-    } else {
-        qb.push(" ORDER BY fecha_vencimiento DESC ");
+    match f.order.as_deref() {
+        Some("e") => {
+            qb.push(
+                " ORDER BY w.expediente DESC, w.fecha_vencimiento DESC "
+            );
+        }
+
+        _ => {
+            qb.push(
+                " ORDER BY w.fecha_vencimiento DESC "
+            );
+        }
     }
 
     let limit = to.saturating_sub(from);
@@ -127,15 +168,32 @@ pub async fn list_range(
         .push(" OFFSET ")
         .push_bind(from);
 
-    let data = qb.build_query_as::<Warrant>().fetch_all(pool).await?;
+    let rows = qb
+        .build_query_as::<WarrantRow>()
+        .fetch_all(pool)
+        .await?;
 
-    let mut count_qb = QueryBuilder::<MySql>::new("SELECT COUNT(*) FROM warrant");
+    let data = rows
+        .into_iter()
+        .map(Warrant::from)
+        .collect();
+
+    let mut count_qb =
+        QueryBuilder::<MySql>::new(
+            "SELECT COUNT(*) FROM warrant w"
+        );
 
     apply_filters(&mut count_qb, f);
 
-    let total: i64 = count_qb.build_query_scalar().fetch_one(pool).await?;
+    let total: i64 = count_qb
+        .build_query_scalar()
+        .fetch_one(pool)
+        .await?;
 
-    Ok(PagedWarrants { data, size: total })
+    Ok(PagedWarrants {
+        data,
+        size: total,
+    })
 }
 
 fn apply_filters<'a>(qb: &mut QueryBuilder<'a, MySql>, f: &'a WarrantFilter) {
@@ -401,4 +459,71 @@ pub async fn notification_count(pool: &MySqlPool) -> Result<i64, ApiError> {
     .fetch_one(pool)
     .await?;
     Ok(count)
+}
+
+#[derive(Debug, FromRow)]
+struct WarrantRow {
+    id: i64,
+    provider_id: Option<i32>,
+    process_type: Option<String>,
+    extension: Option<String>,
+    proveedor: Option<String>,
+    expediente: Option<i32>,
+    entidad: Option<String>,
+    numero: Option<i32>,
+    obra: Option<String>,
+    warrant_type_id: Option<i32>,
+    total: Option<f64>,
+    fecha_renovacion: Option<NaiveDateTime>,
+    nro_carta: Option<String>,
+    fecha_emision: Option<NaiveDateTime>,
+    fecha_vencimiento: Option<NaiveDateTime>,
+    fecha_registro: Option<NaiveDateTime>,
+    observacion: Option<String>,
+    confirmacion_banco: Option<String>,
+    renovated: Option<bool>,
+    status: Option<bool>,
+    canceled: bool,
+    upload: Option<bool>,
+    diff: Option<i64>,
+
+    wt_id: Option<i32>,
+    wt_name: Option<String>,
+}
+
+impl From<WarrantRow> for Warrant {
+    fn from(row: WarrantRow) -> Self {
+        Self {
+            id: row.id,
+            provider_id: row.provider_id,
+            process_type: row.process_type,
+            extension: row.extension,
+            proveedor: row.proveedor,
+            expediente: row.expediente,
+            entidad: row.entidad,
+            numero: row.numero,
+            obra: row.obra,
+            warrant_type_id: row.warrant_type_id,
+            total: row.total,
+            fecha_renovacion: row.fecha_renovacion,
+            nro_carta: row.nro_carta,
+            fecha_emision: row.fecha_emision,
+            fecha_vencimiento: row.fecha_vencimiento,
+            fecha_registro: row.fecha_registro,
+            observacion: row.observacion,
+            confirmacion_banco: row.confirmacion_banco,
+            renovated: row.renovated,
+            status: row.status,
+            canceled: row.canceled,
+            upload: row.upload,
+            diff: row.diff,
+
+            warrant_type: row.wt_id.map(|id| WarrantType {
+                id,
+                name: row.wt_name.unwrap_or_default(),
+            }),
+
+            ext: None,
+        }
+    }
 }
