@@ -169,7 +169,7 @@ fn apply_filters<'a>(
 
 pub async fn find_by_id(pool: &MySqlPool, id: i64) -> Result<Warrant, ApiError> {
     let item = sqlx::query_as::<_, Warrant>(
-        "SELECT id, expediente, provider_id, numero, nro_carta, obra, proveedor, extension, total, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, fecha_emision, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant WHERE id = ?"
+        "SELECT id, expediente, provider_id, numero, nro_carta, obra, proveedor, observacion, extension, total, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, fecha_emision, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant WHERE id = ?"
     )
     .bind(id)
     .fetch_optional(pool)
