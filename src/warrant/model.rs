@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use sqlx::FromRow;
 
+use crate::warrant_type::model::WarrantType;
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -52,6 +54,9 @@ pub struct Warrant {
     pub upload: Option<bool>,
 
     pub diff: Option<i64>,
+
+    #[sqlx(skip)]
+    pub warrant_type: Option<WarrantType>,
     
     #[sqlx(skip)]
     pub ext: Option<WarrantExt>,

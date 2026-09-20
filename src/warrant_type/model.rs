@@ -1,7 +1,7 @@
-use serde::Serialize;
 use sqlx::FromRow;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WarrantType {
     pub id: i32,
     pub name: String,
