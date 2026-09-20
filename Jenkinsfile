@@ -218,6 +218,11 @@ pipeline {
                     string(
                         credentialsId: 'VAULT_TOKEN',
                         variable: 'VAULT_TOKEN'
+                    ),
+                    ,
+                    string(
+                        credentialsId: 'JWT_PUBLIC_KEY',
+                        variable: 'JWT_PUBLIC_KEY'
                     )
                 ]) {
                     bat '''
@@ -233,7 +238,7 @@ pipeline {
                             --type rust ^
                             --env "PORT=%PORT%" ^
                             --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
-                            --env "JWT_PUBLIC_KEY=D:\\java\\publicKey.pem" ^
+                            --env "JWT_PUBLIC_KEY=%JWT_PUBLIC_KEY%" ^
                             --executable "%EXE_NAME%"
 
                         if errorlevel 1 (
