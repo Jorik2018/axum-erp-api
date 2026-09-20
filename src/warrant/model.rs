@@ -1,7 +1,9 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use sqlx::FromRow;
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct Warrant {
@@ -55,6 +57,7 @@ pub struct Warrant {
     pub ext: Option<WarrantExt>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WarrantExt {
