@@ -1,14 +1,18 @@
 use axum::{
-    body::Body, extract::State, http::{Request, StatusCode}, middleware::Next, response::Response
+    body::Body,
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::Response,
 };
 use std::sync::Arc;
 
-use jsonwebtoken::{decode, Algorithm, Validation};
+use jsonwebtoken::{Algorithm, Validation, decode};
 
 use crate::{
-    state::AppState,
     middleware::claims::Claims, // o donde pongas Claims
     middleware::keys::load_decoding_key,
+    state::AppState,
 };
 
 pub async fn auth_middleware(
@@ -16,7 +20,6 @@ pub async fn auth_middleware(
     mut req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    
     // 🔐 1. Obtener Authorization header
     let auth_header = req
         .headers()
@@ -35,34 +38,41 @@ pub async fn auth_middleware(
     validation.set_issuer(&["https://example.com/issuer"]);
 
     let token_data = match decode::<Claims>(token, &decoding_key, &validation) {
-    Ok(data) => data,
-    Err(e) => {
-        eprintln!("❌ JWT decode failed: {:#?}", e);
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-};
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("❌ JWT decode failed: {:#?}", e);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    };
 
     let claims = token_data.claims;
 
     // 🧠 3. Validar sesión en Redis
     // 👉 puedes usar el token completo como key (como estás haciendo)
-    let session = match state.session_service
-        .get(token).await {
+    /*consider using `Option::expect` to unwrap the `SessionService` value, panicking if the value is an `Option::None`: `.expect("REASON")` */
+
+    let session_service = state
+        .session_service
+        .as_ref()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let session = match session_service.get(token).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("❌ Redis error: {}", e); // 👈 IMPORTANTE
+            eprintln!("Redis error: {}", e);
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-println!("token=[{}]", token);
+
+    println!("token=[{}]", token);
     if session.is_none() {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     // 🔥 4. Guardar claims para handlers
     req.extensions_mut().insert(claims);
-//mismatched types
-//expected struct `axum::http::Request<Body>`
-  // found struct `axum::http::Request<B>
+    //mismatched types
+    //expected struct `axum::http::Request<Body>`
+    // found struct `axum::http::Request<B>
     Ok(next.run(req).await)
 }

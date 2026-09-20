@@ -147,7 +147,13 @@ async fn find(
     AuthUser(_claims): AuthUser,
     Path(id): Path<i64>,
 ) -> Result<Json<super::model::Warrant>, ApiError> {
-    Ok(Json(repository::find_by_id(&state.db, id).await?))
+    let mut warrant = repository::find_by_id(&state.db, id).await?;
+
+    warrant.ext = Some(super::model::WarrantExt {
+        src: get_file_name(&warrant),
+    });
+
+    Ok(Json(warrant))
 }
 
 async fn create(

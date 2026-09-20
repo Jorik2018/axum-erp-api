@@ -10,7 +10,7 @@ use crate::service::session_service::SessionService;
 pub struct AppState {
     pub company_service: Arc<CompanyService>,
 
-    pub session_service: SessionService,
+    pub session_service: Option<SessionService>,
 
     pub db: MySqlPool,
 

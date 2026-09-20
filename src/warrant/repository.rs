@@ -179,19 +179,46 @@ pub async fn find_by_id(pool: &MySqlPool, id: i64) -> Result<Warrant, ApiError> 
     Ok(item)
 }
 
-pub async fn create(pool: &MySqlPool, input: SaveWarrant) -> Result<Warrant, ApiError> {
+pub async fn create(
+    pool: &MySqlPool,
+    input: SaveWarrant,
+) -> Result<Warrant, ApiError> {
     let mut tx = pool.begin().await?;
+
+    // Equivalente a XUtil.intValue(entity.getExpediente())
     let expediente = input.expediente.unwrap_or(0);
 
     let numero: i32 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(numero), 0) + 1 FROM warrant WHERE expediente = ? FOR UPDATE"
+        r#"
+        SELECT COALESCE(MAX(numero), 0) + 1
+        FROM warrant
+        WHERE expediente = ?
+        FOR UPDATE
+        "#,
     )
     .bind(expediente)
     .fetch_one(&mut *tx)
     .await?;
 
     let result = sqlx::query(
-        "INSERT INTO warrant (expediente, numero, nro_carta, obra, proveedor, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, renovated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, 0, 0)"
+        r#"
+        INSERT INTO warrant (
+            expediente,
+            numero,
+            nro_carta,
+            obra,
+            proveedor,
+            entidad,
+            warrant_type_id,
+            process_type,
+            fecha_registro,
+            fecha_vencimiento,
+            fecha_renovacion,
+            canceled,
+            renovated
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, 0, 0)
+        "#,
     )
     .bind(input.expediente)
     .bind(numero)
@@ -208,11 +235,19 @@ pub async fn create(pool: &MySqlPool, input: SaveWarrant) -> Result<Warrant, Api
 
     let id = result.last_insert_id() as i64;
 
-    if let (Some(warrant_type_id), Some(fecha_vencimiento)) = (input.warrant_type_id, input.fecha_vencimiento) {
+    if let (Some(warrant_type_id), Some(fecha_vencimiento)) =
+        (input.warrant_type_id, input.fecha_vencimiento)
+    {
         sqlx::query(
-            "UPDATE warrant SET renovated = 1 WHERE id <> ? AND expediente = ? AND warrant_type_id = ? AND fecha_vencimiento < ? AND DATEDIFF(fecha_vencimiento, CURDATE()) > 0"
+            r#"
+            UPDATE warrant
+            SET renovated = 1
+            WHERE expediente = ?
+              AND warrant_type_id = ?
+              AND fecha_vencimiento < ?
+              AND DATEDIFF(fecha_vencimiento, CURDATE()) > 0
+            "#,
         )
-        .bind(id)
         .bind(input.expediente)
         .bind(warrant_type_id)
         .bind(fecha_vencimiento)
@@ -220,22 +255,34 @@ pub async fn create(pool: &MySqlPool, input: SaveWarrant) -> Result<Warrant, Api
         .await?;
     }
 
-    if let Some(process_type) = &input.process_type {
-        sqlx::query("UPDATE warrant SET process_type = ? WHERE expediente = ? AND obra <=> ?")
-            .bind(process_type)
-            .bind(input.expediente)
-            .bind(&input.obra)
-            .execute(&mut *tx)
-            .await?;
-    }
+    propagate_process_type(&mut tx, &input).await?;
 
     tx.commit().await?;
+
     find_by_id(pool, id).await
 }
 
-pub async fn update(pool: &MySqlPool, id: i64, input: SaveWarrant) -> Result<Warrant, ApiError> {
+pub async fn update(
+    pool: &MySqlPool,
+    id: i64,
+    input: SaveWarrant,
+) -> Result<Warrant, ApiError> {
+    let mut tx = pool.begin().await?;
+
     let result = sqlx::query(
-        "UPDATE warrant SET expediente=?, nro_carta=?, obra=?, proveedor=?, entidad=?, warrant_type_id=?, process_type=?, fecha_vencimiento=?, fecha_renovacion=? WHERE id=?"
+        r#"
+        UPDATE warrant
+        SET expediente = ?,
+            nro_carta = ?,
+            obra = ?,
+            proveedor = ?,
+            entidad = ?,
+            warrant_type_id = ?,
+            process_type = ?,
+            fecha_vencimiento = ?,
+            fecha_renovacion = ?
+        WHERE id = ?
+        "#,
     )
     .bind(input.expediente)
     .bind(&input.nro_carta)
@@ -247,11 +294,43 @@ pub async fn update(pool: &MySqlPool, id: i64, input: SaveWarrant) -> Result<War
     .bind(input.fecha_vencimiento)
     .bind(input.fecha_renovacion)
     .bind(id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
-    if result.rows_affected() == 0 { return Err(ApiError::NotFound); }
+    if result.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+
+    propagate_process_type(&mut tx, &input).await?;
+
+    tx.commit().await?;
+
     find_by_id(pool, id).await
+}
+
+async fn propagate_process_type(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    input: &SaveWarrant,
+) -> Result<(), ApiError> {
+    if let Some(process_type) = input.process_type.as_deref() {
+        if !process_type.trim().is_empty() {
+            sqlx::query(
+                r#"
+                UPDATE warrant
+                SET process_type = ?
+                WHERE expediente = ?
+                  AND obra <=> ?
+                "#,
+            )
+            .bind(process_type)
+            .bind(input.expediente)
+            .bind(&input.obra)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn delete(pool: &MySqlPool, id: i64) -> Result<(), ApiError> {
