@@ -1,10 +1,11 @@
-use sqlx::{MySql, MySqlPool, QueryBuilder};
+use chrono::NaiveDateTime;
+use sqlx::{MySql, MySqlPool, QueryBuilder, prelude::FromRow};
 
 use super::{
     dto::{PagedWarrants, SaveWarrant, WarrantFilter},
     model::Warrant,
 };
-use crate::error::ApiError;
+use crate::{error::ApiError, warrant_type::model::WarrantType};
 
 pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, ApiError> {
     let mut where_sql = QueryBuilder::<MySql>::new(" WHERE canceled = 0 ");
