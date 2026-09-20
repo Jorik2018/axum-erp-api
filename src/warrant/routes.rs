@@ -101,11 +101,7 @@ async fn list_range(
     Path((from, to)): Path<(u64, u64)>,
     Query(filter): Query<WarrantFilter>,
 ) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
-    if to <= from {
-        return Err(ApiError::BadRequest(
-            "`to` must be greater than `from`".into(),
-        ));
-    }
+
 
     let mut result = repository::list_range(&state.db, &filter, from, to).await?;
 
