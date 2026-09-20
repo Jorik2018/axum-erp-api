@@ -8,78 +8,71 @@ pipeline {
 
     environment {
         APP_NAME = 'axum-treasury-api'
-
         SERVICE_ID = 'axum-treasury-api'
         SERVICE_NAME = 'AXUM Treasury API'
         SERVICE_DESCRIPTION = 'Axum Treasury API'
 
         PORT = '8085'
-
         DEPLOY_DIR = 'D:\\microservices\\axum-treasury-api'
-    
-    CARGO_EXE_NAME = 'axum-erp-api.exe'
-    EXE_NAME = 'axum-treasury-api.exe'
-        PYTHON_HOME = 'C:\\Tools\\Python312'
-        SERVICE_MANAGER = 'D:\\wildfly\\bin\\service_manager.py'
-
+        CARGO_EXE_NAME = 'axum-erp-api.exe'
+        EXE_NAME = 'axum-treasury-api.exe'
         VAULT_ADDR = 'http://localhost:8200'
     }
 
     stages {
 
-stage('Verify Vault Token') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'VAULT_TOKEN',
-                variable: 'VAULT_TOKEN'
-            )
-        ]) {
-            powershell '''
-                Write-Host "=========================================="
-                Write-Host "Verifying Vault token"
-                Write-Host "=========================================="
+        stage('Verify Vault Token') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'VAULT_TOKEN',
+                        variable: 'VAULT_TOKEN'
+                    )
+                ]) {
+                    powershell '''
+                        Write-Host "=========================================="
+                        Write-Host "Verifying Vault token"
+                        Write-Host "=========================================="
 
-                $headers = @{
-                    "X-Vault-Token" = $env:VAULT_TOKEN
-                }
-
-                try {
-                    $response = Invoke-WebRequest `
-                        -Uri "http://127.0.0.1:8200/v1/auth/token/lookup-self" `
-                        -Headers $headers `
-                        -Method GET `
-                        -UseBasicParsing
-
-                    Write-Host "HTTP Status:" $response.StatusCode
-                    Write-Host "Vault response:"
-                    Write-Host $response.Content
-                }
-                catch {
-                    Write-Host "HTTP request failed"
-
-                    if ($_.Exception.Response) {
-                        try {
-                            Write-Host "HTTP Status:" ([int]$_.Exception.Response.StatusCode)
+                        $headers = @{
+                            "X-Vault-Token" = $env:VAULT_TOKEN
                         }
-                        catch {}
-                    }
 
-                    Write-Host "Vault response:"
+                        try {
+                            $response = Invoke-WebRequest `
+                                -Uri "http://127.0.0.1:8200/v1/auth/token/lookup-self" `
+                                -Headers $headers `
+                                -Method GET `
+                                -UseBasicParsing
 
-                    if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
-                        Write-Host $_.ErrorDetails.Message
-                    }
-                    else {
-                        Write-Host $_.Exception.Message
-                    }
+                            Write-Host "HTTP Status:" $response.StatusCode
+                            Write-Host "Vault response:"
+                            Write-Host $response.Content
+                        } catch {
+                            Write-Host "HTTP request failed"
 
-                    exit 1
+                            if ($_.Exception.Response) {
+                                try {
+                                    Write-Host "HTTP Status:" ([int]$_.Exception.Response.StatusCode)
+                                }
+                                catch {}
+                            }
+
+                            Write-Host "Vault response:"
+
+                            if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+                                Write-Host $_.ErrorDetails.Message
+                            }
+                            else {
+                                Write-Host $_.Exception.Message
+                            }
+
+                            exit 1
+                        }
+                    '''
                 }
-            '''
+            }
         }
-    }
-}
         stage('Rust Environment') {
             steps {
                 bat '''
@@ -96,33 +89,6 @@ stage('Verify Vault Token') {
                     rustup --version
                     rustc --version
                     cargo --version
-                '''
-            }
-        }
-
-        stage('Python Environment') {
-            steps {
-                bat '''
-                    echo ==========================================
-                    echo Python environment
-                    echo ==========================================
-
-                    if not exist "%PYTHON_HOME%\\python.exe" (
-                        echo ERROR: Python not found at:
-                        echo %PYTHON_HOME%\\python.exe
-                        exit /B 1
-                    )
-
-                    "%PYTHON_HOME%\\python.exe" --version
-
-                    if not exist "%SERVICE_MANAGER%" (
-                        echo ERROR: Service manager not found:
-                        echo %SERVICE_MANAGER%
-                        exit /B 1
-                    )
-
-                    echo Service manager:
-                    echo %SERVICE_MANAGER%
                 '''
             }
         }
@@ -238,153 +204,153 @@ stage('Verify Vault Token') {
                 '''
             }
         }
-stage('Service Manager Help') {
-    steps {
-        bat '''
-            "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
-        '''
-    }
-}
-
-stage('Configure Service') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'VAULT_TOKEN',
-                variable: 'VAULT_TOKEN'
-            )
-        ]) {
-            bat '''
-                echo ==========================================
-                echo Configuring Windows service
-                echo ==========================================
-
-                "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
-                    "%SERVICE_ID%" ^
-                    "%DEPLOY_DIR%" ^
-                    --name "%SERVICE_NAME%" ^
-                    --description "%SERVICE_DESCRIPTION%" ^
-                    --type rust ^
-                    --env "PORT=%PORT%" ^
-                    --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
-                    --env "JWT_PUBLIC_KEY=D:\\java\\publicKey.pem" ^
-                    --executable "%EXE_NAME%"
-
-                if errorlevel 1 (
-                    echo ERROR: Service configuration failed
-                    exit /B 1
-                )
-            '''
+        stage('Service Manager Help') {
+            steps {
+                bat '''
+                    "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install --help
+                '''
+            }
         }
-    }
-}
 
-stage('Reinstall Windows Service') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Reinstalling Windows service
-            echo ==========================================
+        stage('Configure Service') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'VAULT_TOKEN',
+                        variable: 'VAULT_TOKEN'
+                    )
+                ]) {
+                    bat '''
+                        echo ==========================================
+                        echo Configuring Windows service
+                        echo ==========================================
 
-            sc stop "%SERVICE_ID%" >nul 2>&1
-            sc delete "%SERVICE_ID%" >nul 2>&1
+                        "%PYTHON_HOME%\\python.exe" "%SERVICE_MANAGER%" install ^
+                            "%SERVICE_ID%" ^
+                            "%DEPLOY_DIR%" ^
+                            --name "%SERVICE_NAME%" ^
+                            --description "%SERVICE_DESCRIPTION%" ^
+                            --type rust ^
+                            --env "PORT=%PORT%" ^
+                            --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
+                            --env "JWT_PUBLIC_KEY=D:\\java\\publicKey.pem" ^
+                            --executable "%EXE_NAME%"
 
-            timeout /t 2 /nobreak >nul
+                        if errorlevel 1 (
+                            echo ERROR: Service configuration failed
+                            exit /B 1
+                        )
+                    '''
+                }
+            }
+        }
 
-            cd /d "%DEPLOY_DIR%"
+        stage('Reinstall Windows Service') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Reinstalling Windows service
+                    echo ==========================================
 
-            service.exe install
+                    sc stop "%SERVICE_ID%" >nul 2>&1
+                    sc delete "%SERVICE_ID%" >nul 2>&1
 
-            if errorlevel 1 (
-                echo ERROR: Could not install service
-                exit /B 1
-            )
+                    timeout /t 2 /nobreak >nul
 
-            sc qc "%SERVICE_ID%"
-        '''
-    }
-}
+                    cd /d "%DEPLOY_DIR%"
 
-stage('Clean Service Logs') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Cleaning service logs
-            echo ==========================================
+                    service.exe install
 
-            del /Q "%DEPLOY_DIR%\\*.log" 2>nul
+                    if errorlevel 1 (
+                        echo ERROR: Could not install service
+                        exit /B 1
+                    )
 
-            echo Logs cleaned.
-        '''
-    }
-}
+                    sc qc "%SERVICE_ID%"
+                '''
+            }
+        }
 
-stage('Start Service') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Windows service configuration
-            echo ==========================================
+        stage('Clean Service Logs') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Cleaning service logs
+                    echo ==========================================
 
-            sc qc "%SERVICE_ID%"
+                    del /Q "%DEPLOY_DIR%\\*.log" 2>nul
 
-            echo ==========================================
-            echo Starting service
-            echo ==========================================
+                    echo Logs cleaned.
+                '''
+            }
+        }
 
-            sc start "%SERVICE_ID%"
+        stage('Start Service') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Windows service configuration
+                    echo ==========================================
 
-            if errorlevel 1 (
-                echo.
-                echo ==========================================
-                echo ERROR: Could not start service
-                echo ==========================================
+                    sc qc "%SERVICE_ID%"
 
-                sc query "%SERVICE_ID%"
+                    echo ==========================================
+                    echo Starting service
+                    echo ==========================================
 
-                echo.
-                echo WinSW files:
-                dir "%DEPLOY_DIR%"
+                    sc start "%SERVICE_ID%"
 
-                exit /B 1
-            )
-        '''
-    }
-}
+                    if errorlevel 1 (
+                        echo.
+                        echo ==========================================
+                        echo ERROR: Could not start service
+                        echo ==========================================
 
-stage('Verify Service') {
-    steps {
-        bat '''
-            echo ==========================================
-            echo Checking Windows service
-            echo ==========================================
+                        sc query "%SERVICE_ID%"
 
-            sc query "%SERVICE_ID%"
+                        echo.
+                        echo WinSW files:
+                        dir "%DEPLOY_DIR%"
 
-            sc query "%SERVICE_ID%" | findstr /I "RUNNING"
+                        exit /B 1
+                    )
+                '''
+            }
+        }
 
-            if errorlevel 1 (
-                echo ERROR: Service is not running.
-                exit /B 1
-            )
+        stage('Verify Service') {
+            steps {
+                bat '''
+                    echo ==========================================
+                    echo Checking Windows service
+                    echo ==========================================
 
-            echo Service is RUNNING.
+                    sc query "%SERVICE_ID%"
 
-            echo ==========================================
-            echo Checking Rust API port
-            echo ==========================================
+                    sc query "%SERVICE_ID%" | findstr /I "RUNNING"
 
-            netstat -ano | findstr ":%PORT%"
+                    if errorlevel 1 (
+                        echo ERROR: Service is not running.
+                        exit /B 1
+                    )
 
-            if errorlevel 1 (
-                echo ERROR: Rust API is not listening on port %PORT%
-                exit /B 1
-            )
+                    echo Service is RUNNING.
 
-            echo Rust API is listening on port %PORT%.
-        '''
-    }
-}
+                    echo ==========================================
+                    echo Checking Rust API port
+                    echo ==========================================
+
+                    netstat -ano | findstr ":%PORT%"
+
+                    if errorlevel 1 (
+                        echo ERROR: Rust API is not listening on port %PORT%
+                        exit /B 1
+                    )
+
+                    echo Rust API is listening on port %PORT%.
+                '''
+            }
+        }
     }
 
     post {
@@ -401,11 +367,11 @@ stage('Verify Service') {
         }
 
         always {
-archiveArtifacts(
-    artifacts: "target/release/${env.CARGO_EXE_NAME}",
-    fingerprint: true,
-    allowEmptyArchive: true
-)
+            archiveArtifacts(
+                artifacts: "target/release/${env.CARGO_EXE_NAME}",
+                fingerprint: true,
+                allowEmptyArchive: true
+            )
         }
     }
 }
