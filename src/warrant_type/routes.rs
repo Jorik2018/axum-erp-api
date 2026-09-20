@@ -17,10 +17,11 @@ use super::model::WarrantType;
 
 pub fn warrant_type_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/", get(list))
+        .route("/{from}/{to}", get(list_range))
 }
 
-async fn list(
+
+async fn list_range(
     State(state): State<Arc<AppState>>,
     AuthUser(_claims): AuthUser,
 ) -> Result<Json<Vec<WarrantType>>, ApiError> {
