@@ -1,52 +1,75 @@
 use sqlx::{MySql, MySqlPool, QueryBuilder};
 
+use super::{
+    dto::{PagedWarrants, SaveWarrant, WarrantFilter},
+    model::Warrant,
+};
 use crate::error::ApiError;
-use super::{dto::{PagedWarrants, SaveWarrant, WarrantFilter}, model::Warrant};
 
 pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, ApiError> {
     let mut where_sql = QueryBuilder::<MySql>::new(" WHERE canceled = 0 ");
 
     if let Some(expediente) = &f.expediente {
-        where_sql.push(" AND LPAD(expediente, 3, '0') LIKE ").push_bind(format!("%{}%", expediente.replace(' ', "%")));
+        where_sql
+            .push(" AND LPAD(expediente, 3, '0') LIKE ")
+            .push_bind(format!("%{}%", expediente.replace(' ', "%")));
     }
     if let Some(entidad) = &f.entidad {
-        where_sql.push(" AND UPPER(entidad) LIKE ").push_bind(format!("%{}%", entidad.to_uppercase().replace(' ', "%")));
+        where_sql
+            .push(" AND UPPER(entidad) LIKE ")
+            .push_bind(format!("%{}%", entidad.to_uppercase().replace(' ', "%")));
     }
     if let Some(obra) = &f.obra {
-        where_sql.push(" AND UPPER(obra) LIKE ").push_bind(format!("%{}%", obra.to_uppercase().replace(' ', "%")));
+        where_sql
+            .push(" AND UPPER(obra) LIKE ")
+            .push_bind(format!("%{}%", obra.to_uppercase().replace(' ', "%")));
     }
     if let Some(code) = &f.code {
-        where_sql.push(" AND UPPER(nro_carta) LIKE ").push_bind(format!("%{}%", code.to_uppercase().replace(' ', "%")));
+        where_sql
+            .push(" AND UPPER(nro_carta) LIKE ")
+            .push_bind(format!("%{}%", code.to_uppercase().replace(' ', "%")));
     }
     if let Some(provider) = &f.provider {
-        where_sql.push(" AND UPPER(proveedor) LIKE ").push_bind(format!("%{}%", provider.to_uppercase().replace(' ', "%")));
+        where_sql
+            .push(" AND UPPER(proveedor) LIKE ")
+            .push_bind(format!("%{}%", provider.to_uppercase().replace(' ', "%")));
     }
     if let Some(ids) = &f.warrant_type {
         if !ids.is_empty() {
             where_sql.push(" AND warrant_type_id IN (");
             let mut separated = where_sql.separated(", ");
-            for id in ids { separated.push_bind(id); }
+            for id in ids {
+                separated.push_bind(id);
+            }
             separated.push_unseparated(")");
         }
     }
     if let Some(d) = f.fecha_ini {
-        where_sql.push(" AND DATE(fecha_vencimiento) >= ").push_bind(d);
+        where_sql
+            .push(" AND DATE(fecha_vencimiento) >= ")
+            .push_bind(d);
     }
     if let Some(d) = f.fecha_fin {
-        where_sql.push(" AND DATE(fecha_vencimiento) <= ").push_bind(d);
+        where_sql
+            .push(" AND DATE(fecha_vencimiento) <= ")
+            .push_bind(d);
     }
 
     let danger = f.danger.unwrap_or(false);
     match (danger, f.faltan.unwrap_or(0)) {
-        (true, _) | (_, 1) => { where_sql.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) BETWEEN 1 AND 5 "); }
-        (_, x) if x < 0 => { where_sql.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) <= 0 "); }
+        (true, _) | (_, 1) => {
+            where_sql.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) BETWEEN 1 AND 5 ");
+        }
+        (_, x) if x < 0 => {
+            where_sql.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) <= 0 ");
+        }
         _ => {}
     }
 
     let where_fragment = where_sql.sql().to_string();
 
     let mut qb = QueryBuilder::<MySql>::new(
-        "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant"
+        "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant",
     );
 
     // Rebuild filters so bind values are attached to this query.
@@ -60,7 +83,10 @@ pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, 
 
     let size = f.size.unwrap_or(50).min(500);
     let page = f.page.unwrap_or(0);
-    qb.push(" LIMIT ").push_bind(size).push(" OFFSET ").push_bind(page * size);
+    qb.push(" LIMIT ")
+        .push_bind(size)
+        .push(" OFFSET ")
+        .push_bind(page * size);
 
     let data = qb.build_query_as::<Warrant>().fetch_all(pool).await?;
 
@@ -71,7 +97,6 @@ pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, 
     let _ = where_fragment;
     Ok(PagedWarrants { data, size: total })
 }
-
 
 pub async fn list_range(
     pool: &MySqlPool,
@@ -84,7 +109,7 @@ pub async fn list_range(
          warrant_type_id, process_type, fecha_registro, fecha_vencimiento,fecha_emision,observacion, \
          fecha_renovacion, canceled, upload, renovated, total,provider_id,status, \
          extension, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff \
-         FROM warrant"
+         FROM warrant",
     );
 
     apply_filters(&mut qb, f);
@@ -102,53 +127,47 @@ pub async fn list_range(
         .push(" OFFSET ")
         .push_bind(from);
 
-    let data = qb
-        .build_query_as::<Warrant>()
-        .fetch_all(pool)
-        .await?;
+    let data = qb.build_query_as::<Warrant>().fetch_all(pool).await?;
 
-    let mut count_qb =
-        QueryBuilder::<MySql>::new("SELECT COUNT(*) FROM warrant");
+    let mut count_qb = QueryBuilder::<MySql>::new("SELECT COUNT(*) FROM warrant");
 
     apply_filters(&mut count_qb, f);
 
-    let total: i64 = count_qb
-        .build_query_scalar()
-        .fetch_one(pool)
-        .await?;
+    let total: i64 = count_qb.build_query_scalar().fetch_one(pool).await?;
 
-    Ok(PagedWarrants {
-        data,
-        size: total,
-    })
+    Ok(PagedWarrants { data, size: total })
 }
 
-fn apply_filters<'a>(
-    qb: &mut QueryBuilder<'a, MySql>,
-    f: &'a WarrantFilter,
-) {
+fn apply_filters<'a>(qb: &mut QueryBuilder<'a, MySql>, f: &'a WarrantFilter) {
     qb.push(" WHERE canceled = 0 ");
 
     if let Some(expediente) = &f.expediente {
-        qb.push(" AND LPAD(expediente, 3, '0') LIKE ").push_bind(format!("%{}%", expediente.replace(' ', "%")));
+        qb.push(" AND LPAD(expediente, 3, '0') LIKE ")
+            .push_bind(format!("%{}%", expediente.replace(' ', "%")));
     }
     if let Some(entidad) = &f.entidad {
-        qb.push(" AND UPPER(entidad) LIKE ").push_bind(format!("%{}%", entidad.to_uppercase().replace(' ', "%")));
+        qb.push(" AND UPPER(entidad) LIKE ")
+            .push_bind(format!("%{}%", entidad.to_uppercase().replace(' ', "%")));
     }
     if let Some(obra) = &f.obra {
-        qb.push(" AND UPPER(obra) LIKE ").push_bind(format!("%{}%", obra.to_uppercase().replace(' ', "%")));
+        qb.push(" AND UPPER(obra) LIKE ")
+            .push_bind(format!("%{}%", obra.to_uppercase().replace(' ', "%")));
     }
     if let Some(code) = &f.code {
-        qb.push(" AND UPPER(nro_carta) LIKE ").push_bind(format!("%{}%", code.to_uppercase().replace(' ', "%")));
+        qb.push(" AND UPPER(nro_carta) LIKE ")
+            .push_bind(format!("%{}%", code.to_uppercase().replace(' ', "%")));
     }
     if let Some(provider) = &f.provider {
-        qb.push(" AND UPPER(proveedor) LIKE ").push_bind(format!("%{}%", provider.to_uppercase().replace(' ', "%")));
+        qb.push(" AND UPPER(proveedor) LIKE ")
+            .push_bind(format!("%{}%", provider.to_uppercase().replace(' ', "%")));
     }
     if let Some(ids) = &f.warrant_type {
         if !ids.is_empty() {
             qb.push(" AND warrant_type_id IN (");
             let mut separated = qb.separated(", ");
-            for id in ids { separated.push_bind(id); }
+            for id in ids {
+                separated.push_bind(id);
+            }
             separated.push_unseparated(")");
         }
     }
@@ -161,15 +180,46 @@ fn apply_filters<'a>(
 
     let danger = f.danger.unwrap_or(false);
     match (danger, f.faltan.unwrap_or(0)) {
-        (true, _) | (_, 1) => { qb.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) BETWEEN 1 AND 5 "); }
-        (_, x) if x < 0 => { qb.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) <= 0 "); }
+        (true, _) | (_, 1) => {
+            qb.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) BETWEEN 1 AND 5 ");
+        }
+        (_, x) if x < 0 => {
+            qb.push(" AND DATEDIFF(fecha_vencimiento, CURDATE()) <= 0 ");
+        }
         _ => {}
     }
 }
 
 pub async fn find_by_id(pool: &MySqlPool, id: i64) -> Result<Warrant, ApiError> {
     let item = sqlx::query_as::<_, Warrant>(
-        "SELECT id, expediente, provider_id, numero, nro_carta, obra, proveedor, observacion, extension, total, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, fecha_emision, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant WHERE id = ?"
+        r#"
+        SELECT
+            id,
+            provider_id,
+            process_type,
+            extension,
+            proveedor,
+            expediente,
+            entidad,
+            numero,
+            obra,
+            warrant_type_id,
+            total,
+            fecha_renovacion,
+            nro_carta,
+            fecha_emision,
+            fecha_vencimiento,
+            fecha_registro,
+            observacion,
+            confirmacion_banco,
+            renovated,
+            status,
+            canceled,
+            upload,
+            DATEDIFF(fecha_vencimiento, CURDATE()) AS diff
+        FROM warrant
+        WHERE id = ?
+        "#,
     )
     .bind(id)
     .fetch_optional(pool)
@@ -179,10 +229,7 @@ pub async fn find_by_id(pool: &MySqlPool, id: i64) -> Result<Warrant, ApiError> 
     Ok(item)
 }
 
-pub async fn create(
-    pool: &MySqlPool,
-    input: SaveWarrant,
-) -> Result<Warrant, ApiError> {
+pub async fn create(pool: &MySqlPool, input: SaveWarrant) -> Result<Warrant, ApiError> {
     let mut tx = pool.begin().await?;
 
     // Equivalente a XUtil.intValue(entity.getExpediente())
@@ -262,11 +309,7 @@ pub async fn create(
     find_by_id(pool, id).await
 }
 
-pub async fn update(
-    pool: &MySqlPool,
-    id: i64,
-    input: SaveWarrant,
-) -> Result<Warrant, ApiError> {
+pub async fn update(pool: &MySqlPool, id: i64, input: SaveWarrant) -> Result<Warrant, ApiError> {
     let mut tx = pool.begin().await?;
 
     let result = sqlx::query(
@@ -338,7 +381,9 @@ pub async fn delete(pool: &MySqlPool, id: i64) -> Result<(), ApiError> {
         .bind(id)
         .execute(pool)
         .await?;
-    if result.rows_affected() == 0 { return Err(ApiError::NotFound); }
+    if result.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
     Ok(())
 }
 
