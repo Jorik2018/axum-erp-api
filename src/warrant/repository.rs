@@ -70,7 +70,7 @@ pub async fn list(pool: &MySqlPool, f: &WarrantFilter) -> Result<PagedWarrants, 
     let where_fragment = where_sql.sql().to_string();
 
     let mut qb = QueryBuilder::<MySql>::new(
-        "SELECT id, expediente, numero, nro_carta, obra, proveedor, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant",
+        "SELECT id, expediente, provider_id,numero, nro_carta, obra, proveedor, entidad, warrant_type_id, process_type, fecha_registro, fecha_vencimiento, fecha_renovacion, canceled, renovated, DATEDIFF(fecha_vencimiento, CURDATE()) AS diff FROM warrant",
     );
 
     // Rebuild filters so bind values are attached to this query.
@@ -150,49 +150,32 @@ pub async fn list_range(
 
     match f.order.as_deref() {
         Some("e") => {
-            qb.push(
-                " ORDER BY w.expediente DESC, w.fecha_vencimiento DESC "
-            );
+            qb.push(" ORDER BY w.expediente DESC, w.fecha_vencimiento DESC ");
         }
 
         _ => {
-            qb.push(
-                " ORDER BY w.fecha_vencimiento DESC "
-            );
+            qb.push(" ORDER BY w.fecha_vencimiento DESC ");
         }
     }
 
-qb.push(" LIMIT ")
-    .push_bind(to)
-    .push(" OFFSET ")
-    .push_bind(from);
+    if to > 0 {
+        qb.push(" LIMIT ")
+            .push_bind(to)
+            .push(" OFFSET ")
+            .push_bind(from);
+    }
 
-    let rows = qb
-        .build_query_as::<WarrantRow>()
-        .fetch_all(pool)
-        .await?;
+    let rows = qb.build_query_as::<WarrantRow>().fetch_all(pool).await?;
 
-    let data = rows
-        .into_iter()
-        .map(Warrant::from)
-        .collect();
+    let data = rows.into_iter().map(Warrant::from).collect();
 
-    let mut count_qb =
-        QueryBuilder::<MySql>::new(
-            "SELECT COUNT(*) FROM warrant w"
-        );
+    let mut count_qb = QueryBuilder::<MySql>::new("SELECT COUNT(*) FROM warrant w");
 
     apply_filters(&mut count_qb, f);
 
-    let total: i64 = count_qb
-        .build_query_scalar()
-        .fetch_one(pool)
-        .await?;
+    let total: i64 = count_qb.build_query_scalar().fetch_one(pool).await?;
 
-    Ok(PagedWarrants {
-        data,
-        size: total,
-    })
+    Ok(PagedWarrants { data, size: total })
 }
 
 fn apply_filters<'a>(qb: &mut QueryBuilder<'a, MySql>, f: &'a WarrantFilter) {

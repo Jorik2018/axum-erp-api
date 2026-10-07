@@ -225,9 +225,10 @@ async fn download_report(
     };
 
 
-    let result = repository::list(
+    let result = repository::list_range(
         &state.db,
         &filter,
+        0,0
     )
     .await?;
 
