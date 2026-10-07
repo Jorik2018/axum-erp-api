@@ -4,9 +4,11 @@ use super::{
 };
 use crate::{auth::AuthUser, error::ApiError, state::AppState};
 use axum::{
-    Json, Router,
-    extract::{Path, Query, State},
-    routing::get,
+    Json, Router, body::Body, extract::{Path, Query, State}, http::{
+        Response,
+        StatusCode,
+        header,
+    }, response::IntoResponse, routing::{get, post},
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -31,7 +33,7 @@ pub fn warrant_routes() -> Router<Arc<AppState>> {
         .route("/notifications", get(notifications))
         .route("/{from}/{to}", get(list_range))
         .route("/{id}", get(find).put(update).delete(remove))
-        .route("/download", axum::routing::post(download_report))
+        .route("/download", post(download_report))
 }
 
 async fn create_template(
@@ -117,7 +119,11 @@ async fn download_report(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| value.as_i64().map(|value| value as i32))
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .map(|value| value as i32)
+                })
         })
         .unwrap_or(0);
 
@@ -128,7 +134,11 @@ async fn download_report(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| value.as_i64().map(|value| value as i32))
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .map(|value| value as i32)
+                })
         })
         .unwrap_or(0);
 
@@ -161,20 +171,17 @@ async fn download_report(
 
 
     /*
-     * Temporalmente usamos el repositorio normal.
+     * Temporalmente se usa el listado normal.
      *
-     * Aquí después podemos crear:
+     * Después debería reemplazarse por algo como:
      *
-     * repository::report(...)
+     * repository::report(&state.db, ...)
      *
-     * para reproducir exactamente:
+     * para reproducir:
      *
      * warrantFacade.load(0, 0, null, p)
      */
-
-
     let filter = WarrantFilter {
-        // Completar con los campos reales de WarrantFilter.
         ..Default::default()
     };
 
@@ -187,45 +194,51 @@ async fn download_report(
 
 
     /*
-     * Equivalente futuro aproximado a la selección
-     * del Jasper:
+     * Mantiene la misma lógica del Jasper original.
      *
-     * option == 1:
-     *     cartaFianza_1
-     *
-     * group == 1:
-     *     cartaFianza_x_expediente
-     *
-     * group == 2:
-     *     cartaFianza_x_proveedor
+     * group tiene prioridad sobre option.
      */
-
     let report_name = match group {
+
         1 => "cartaFianza_x_expediente",
+
         2 => "cartaFianza_x_proveedor",
 
         _ => match option {
+
             1 => "cartaFianza_1",
+
             _ => "cartaFianza",
         },
     };
 
 
     let output = json!({
+
         "report": report_name,
 
         "parameters": {
+
             "FORMAT": format,
+
             "FECHA_INI": fecha_ini,
+
             "FECHA_FIN": fecha_fin,
+
             "TITLE_REPORT": title_report,
+
             "danger": danger,
+
             "order": order,
+
             "group": group,
+
             "option": option,
 
             "IS_ONE_PAGE_PER_SHEET": false,
+
             "SIGN_SECTION": true,
+
             "rest": true
         },
 
@@ -233,11 +246,21 @@ async fn download_report(
     });
 
 
-    let content = serde_json::to_string_pretty(&output)
-        .map_err(|_| ApiError::InternalServerError)?;
+    let content = serde_json::to_string_pretty(
+        &output,
+    )
+    .map_err(|error| {
+        ApiError::BadRequest(
+            format!(
+                "error serializando reporte: {error}"
+            )
+        )
+    })?;
 
 
-    let filename = format!("{report_name}.json");
+    let filename = format!(
+        "{report_name}.json"
+    );
 
 
     let response = Response::builder()
@@ -248,10 +271,20 @@ async fn download_report(
         )
         .header(
             header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{filename}\""),
+            format!(
+                "attachment; filename=\"{filename}\""
+            ),
         )
-        .body(Body::from(content))
-        .map_err(|_| ApiError::InternalServerError)?;
+        .body(
+            Body::from(content)
+        )
+        .map_err(|error| {
+            ApiError::BadRequest(
+                format!(
+                    "error construyendo respuesta: {error}"
+                )
+            )
+        })?;
 
 
     Ok(response)
