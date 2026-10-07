@@ -13,6 +13,7 @@ use axum::{
 use serde_json::{Value, json};
 use std::sync::Arc;
 use unicode_normalization::UnicodeNormalization;
+use chrono::NaiveDate;
 
 fn simplify_file_name(input: &str) -> String {
     let ascii: String = input
@@ -98,6 +99,7 @@ async fn list(
     Ok(Json(repository::list(&state.db, &filter).await?))
 }
 
+
 async fn download_report(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
@@ -145,12 +147,42 @@ async fn download_report(
 
     let fecha_ini = input
         .get("FECHA_INI")
-        .and_then(Value::as_str);
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            NaiveDate::parse_from_str(
+                value,
+                "%d/%m/%Y",
+            )
+            .map_err(|_| {
+                ApiError::BadRequest(
+                    format!(
+                        "FECHA_INI inválida: {value}"
+                    )
+                )
+            })
+        })
+        .transpose()?;
 
 
     let fecha_fin = input
         .get("FECHA_FIN")
-        .and_then(Value::as_str);
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            NaiveDate::parse_from_str(
+                value,
+                "%d/%m/%Y",
+            )
+            .map_err(|_| {
+                ApiError::BadRequest(
+                    format!(
+                        "FECHA_FIN inválida: {value}"
+                    )
+                )
+            })
+        })
+        .transpose()?;
 
 
     let danger = input
@@ -161,7 +193,8 @@ async fn download_report(
 
     let order = input
         .get("order")
-        .and_then(Value::as_str);
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
 
     let title_report = input
@@ -170,19 +203,25 @@ async fn download_report(
         .unwrap_or("REPORTE DE CARTAS FIANZAS");
 
 
-    /*
-     * Temporalmente se usa el listado normal.
-     *
-     * Después debería reemplazarse por algo como:
-     *
-     * repository::report(&state.db, ...)
-     *
-     * para reproducir:
-     *
-     * warrantFacade.load(0, 0, null, p)
-     */
     let filter = WarrantFilter {
-        ..Default::default()
+        code: None,
+        obra: None,
+        provider: None,
+        expediente: None,
+        entidad: None,
+        warrant_type: None,
+
+        faltan: None,
+
+        danger: Some(danger),
+
+        fecha_ini,
+        fecha_fin,
+
+        page: None,
+        size: None,
+
+        order: order.clone(),
     };
 
 
@@ -193,11 +232,6 @@ async fn download_report(
     .await?;
 
 
-    /*
-     * Mantiene la misma lógica del Jasper original.
-     *
-     * group tiene prioridad sobre option.
-     */
     let report_name = match group {
 
         1 => "cartaFianza_x_expediente",
@@ -221,9 +255,11 @@ async fn download_report(
 
             "FORMAT": format,
 
-            "FECHA_INI": fecha_ini,
+            "FECHA_INI": fecha_ini
+                .map(|value| value.format("%d/%m/%Y").to_string()),
 
-            "FECHA_FIN": fecha_fin,
+            "FECHA_FIN": fecha_fin
+                .map(|value| value.format("%d/%m/%Y").to_string()),
 
             "TITLE_REPORT": title_report,
 
