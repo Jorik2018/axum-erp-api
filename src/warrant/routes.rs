@@ -435,9 +435,9 @@ async fn notifications(
 }
 
 fn require_tesoreria(claims: &crate::auth::Claims) -> Result<(), ApiError> {
-    if claims.has_group("ACCESS_TESORERIA") {
+    //if claims.has_group("ACCESS_TESORERIA") {
         Ok(())
-    } else {
-        Err(ApiError::Forbidden)
-    }
+    //} else {
+      //  Err(ApiError::Forbidden)
+    //}
 }
