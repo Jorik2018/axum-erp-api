@@ -4,16 +4,17 @@ use super::{
 };
 use crate::{auth::AuthUser, error::ApiError, state::AppState};
 use axum::{
-    Json, Router, body::Body, extract::{Path, Query, State}, http::{
-        Response,
-        StatusCode,
-        header,
-    }, response::IntoResponse, routing::{get, post},
+    Json, Router,
+    body::Body,
+    extract::{Path, Query, State},
+    http::{Response, StatusCode, header},
+    response::IntoResponse,
+    routing::{get, post},
 };
+use chrono::NaiveDate;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use unicode_normalization::UnicodeNormalization;
-use chrono::NaiveDate;
 
 fn simplify_file_name(input: &str) -> String {
     let ascii: String = input
@@ -28,13 +29,12 @@ fn simplify_file_name(input: &str) -> String {
 
 pub fn warrant_routes() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/", get(list).post(create))
         .route("/create/{id}", get(create_template))
         .route("/max-expediente", get(max_expediente))
         .route("/notifications", get(notifications))
         .route("/{from}/{to}", get(list_range))
         .route("/{id}", get(find).put(update).delete(remove))
-        .route("/download", post(download_report))
+        .route("/download", post(download))
 }
 
 async fn create_template(
@@ -91,29 +91,17 @@ async fn create_template(
     Ok(Json(warrant))
 }
 
-async fn list(
-    State(state): State<Arc<AppState>>,
-    AuthUser(_claims): AuthUser,
-    Query(filter): Query<WarrantFilter>,
-) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
-    Ok(Json(repository::list(&state.db, &filter).await?))
-}
-
-
-async fn download_report(
+async fn download(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
     Json(input): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-
     require_tesoreria(&claims)?;
-
 
     let format = input
         .get("FORMAT")
         .and_then(Value::as_str)
         .unwrap_or("json");
-
 
     let group = input
         .get("group")
@@ -121,14 +109,9 @@ async fn download_report(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| {
-                    value
-                        .as_i64()
-                        .map(|value| value as i32)
-                })
+                .or_else(|| value.as_i64().map(|value| value as i32))
         })
         .unwrap_or(0);
-
 
     let option = input
         .get("option")
@@ -136,72 +119,44 @@ async fn download_report(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| {
-                    value
-                        .as_i64()
-                        .map(|value| value as i32)
-                })
+                .or_else(|| value.as_i64().map(|value| value as i32))
         })
         .unwrap_or(0);
-
 
     let fecha_ini = input
         .get("FECHA_INI")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(|value| {
-            NaiveDate::parse_from_str(
-                value,
-                "%d/%m/%Y",
-            )
-            .map_err(|_| {
-                ApiError::BadRequest(
-                    format!(
-                        "FECHA_INI inválida: {value}"
-                    )
-                )
-            })
+            NaiveDate::parse_from_str(value, "%d/%m/%Y")
+                .map_err(|_| ApiError::BadRequest(format!("FECHA_INI inválida: {value}")))
         })
         .transpose()?;
-
 
     let fecha_fin = input
         .get("FECHA_FIN")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(|value| {
-            NaiveDate::parse_from_str(
-                value,
-                "%d/%m/%Y",
-            )
-            .map_err(|_| {
-                ApiError::BadRequest(
-                    format!(
-                        "FECHA_FIN inválida: {value}"
-                    )
-                )
-            })
+            NaiveDate::parse_from_str(value, "%d/%m/%Y")
+                .map_err(|_| ApiError::BadRequest(format!("FECHA_FIN inválida: {value}")))
         })
         .transpose()?;
-
 
     let danger = input
         .get("danger")
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-
     let order = input
         .get("order")
         .and_then(Value::as_str)
         .map(str::to_string);
 
-
     let title_report = input
         .get("TITLE_REPORT")
         .and_then(Value::as_str)
         .unwrap_or("REPORTE DE CARTAS FIANZAS");
-
 
     let filter = WarrantFilter {
         code: None,
@@ -224,29 +179,19 @@ async fn download_report(
         order: order.clone(),
     };
 
-
-    let result = repository::list_range(
-        &state.db,
-        &filter,
-        0,0
-    )
-    .await?;
-
+    let result = repository::list_range(&state.db, &filter, 0, 0).await?;
 
     let report_name = match group {
-
         1 => "cartaFianza_x_expediente",
 
         2 => "cartaFianza_x_proveedor",
 
         _ => match option {
-
             1 => "cartaFianza_1",
 
             _ => "cartaFianza",
         },
     };
-
 
     let output = json!({
 
@@ -282,47 +227,20 @@ async fn download_report(
         "data": result.data
     });
 
+    let content = serde_json::to_string_pretty(&output)
+        .map_err(|error| ApiError::BadRequest(format!("error serializando reporte: {error}")))?;
 
-    let content = serde_json::to_string_pretty(
-        &output,
-    )
-    .map_err(|error| {
-        ApiError::BadRequest(
-            format!(
-                "error serializando reporte: {error}"
-            )
-        )
-    })?;
-
-
-    let filename = format!(
-        "{report_name}.json"
-    );
-
+    let filename = format!("{report_name}.json");
 
     let response = Response::builder()
         .status(StatusCode::OK)
-        .header(
-            header::CONTENT_TYPE,
-            "application/json; charset=utf-8",
-        )
+        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .header(
             header::CONTENT_DISPOSITION,
-            format!(
-                "attachment; filename=\"{filename}\""
-            ),
+            format!("attachment; filename=\"{filename}\""),
         )
-        .body(
-            Body::from(content)
-        )
-        .map_err(|error| {
-            ApiError::BadRequest(
-                format!(
-                    "error construyendo respuesta: {error}"
-                )
-            )
-        })?;
-
+        .body(Body::from(content))
+        .map_err(|error| ApiError::BadRequest(format!("error construyendo respuesta: {error}")))?;
 
     Ok(response)
 }
@@ -333,8 +251,6 @@ async fn list_range(
     Path((from, to)): Path<(u64, u64)>,
     Query(filter): Query<WarrantFilter>,
 ) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
-
-
     let mut result = repository::list_range(&state.db, &filter, from, to).await?;
 
     for warrant in &mut result.data {
@@ -437,8 +353,8 @@ async fn notifications(
 
 fn require_tesoreria(claims: &crate::auth::Claims) -> Result<(), ApiError> {
     //if claims.has_group("ACCESS_TESORERIA") {
-        Ok(())
+    Ok(())
     //} else {
-      //  Err(ApiError::Forbidden)
+    //  Err(ApiError::Forbidden)
     //}
 }
