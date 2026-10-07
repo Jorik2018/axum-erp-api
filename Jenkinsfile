@@ -237,6 +237,7 @@ pipeline {
                             --description "%SERVICE_DESCRIPTION%" ^
                             --type rust ^
                             --env "PORT=%PORT%" ^
+                            --env "JASPER_URL=http://38.250.177.7:1128/v2" ^
                             --env "VAULT_TOKEN=%VAULT_TOKEN%" ^
                             --env "JWT_PUBLIC_KEY=%JWT_PUBLIC_KEY%" ^
                             --executable "%EXE_NAME%"
