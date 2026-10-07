@@ -16,6 +16,13 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use unicode_normalization::UnicodeNormalization;
 
+//unresolved import `reqwest::multipart`
+//could not find `multipart` in `reqwest`
+use reqwest::multipart::{
+    Form,
+    Part,
+};
+
 fn simplify_file_name(input: &str) -> String {
     let ascii: String = input
         .trim()
@@ -91,17 +98,21 @@ async fn create_template(
     Ok(Json(warrant))
 }
 
+
 async fn download(
     State(state): State<Arc<AppState>>,
     AuthUser(claims): AuthUser,
     Json(input): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
+
     require_tesoreria(&claims)?;
+
 
     let format = input
         .get("FORMAT")
         .and_then(Value::as_str)
-        .unwrap_or("json");
+        .unwrap_or("pdf");
+
 
     let group = input
         .get("group")
@@ -109,9 +120,14 @@ async fn download(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| value.as_i64().map(|value| value as i32))
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .map(|value| value as i32)
+                })
         })
         .unwrap_or(0);
+
 
     let option = input
         .get("option")
@@ -119,44 +135,76 @@ async fn download(
             value
                 .as_str()
                 .and_then(|value| value.parse::<i32>().ok())
-                .or_else(|| value.as_i64().map(|value| value as i32))
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .map(|value| value as i32)
+                })
         })
         .unwrap_or(0);
+
 
     let fecha_ini = input
         .get("FECHA_INI")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(|value| {
-            NaiveDate::parse_from_str(value, "%d/%m/%Y")
-                .map_err(|_| ApiError::BadRequest(format!("FECHA_INI inválida: {value}")))
+
+            NaiveDate::parse_from_str(
+                value,
+                "%d/%m/%Y",
+            )
+            .map_err(|_| {
+                ApiError::BadRequest(
+                    format!(
+                        "FECHA_INI inválida: {value}"
+                    )
+                )
+            })
         })
         .transpose()?;
+
 
     let fecha_fin = input
         .get("FECHA_FIN")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(|value| {
-            NaiveDate::parse_from_str(value, "%d/%m/%Y")
-                .map_err(|_| ApiError::BadRequest(format!("FECHA_FIN inválida: {value}")))
+
+            NaiveDate::parse_from_str(
+                value,
+                "%d/%m/%Y",
+            )
+            .map_err(|_| {
+                ApiError::BadRequest(
+                    format!(
+                        "FECHA_FIN inválida: {value}"
+                    )
+                )
+            })
         })
         .transpose()?;
+
 
     let danger = input
         .get("danger")
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+
     let order = input
         .get("order")
         .and_then(Value::as_str)
         .map(str::to_string);
 
+
     let title_report = input
         .get("TITLE_REPORT")
         .and_then(Value::as_str)
-        .unwrap_or("REPORTE DE CARTAS FIANZAS");
+        .unwrap_or(
+            "REPORTE DE CARTAS FIANZAS"
+        );
+
 
     let filter = WarrantFilter {
         code: None,
@@ -179,68 +227,279 @@ async fn download(
         order: order.clone(),
     };
 
-    let result = repository::list_range(&state.db, &filter, 0, 0).await?;
 
+    /*
+     * 0 / 0 = sin paginación
+     */
+    let result = repository::list_range(
+        &state.db,
+        &filter,
+        0,
+        0,
+    )
+    .await?;
+
+
+    /*
+     * Selección equivalente a los Jasper antiguos.
+     */
     let report_name = match group {
-        1 => "cartaFianza_x_expediente",
 
-        2 => "cartaFianza_x_proveedor",
+        1 => {
+            "cartaFianza_x_expediente"
+        }
+
+        2 => {
+            "cartaFianza_x_proveedor"
+        }
 
         _ => match option {
-            1 => "cartaFianza_1",
 
-            _ => "cartaFianza",
+            1 => {
+                "cartaFianza_1"
+            }
+
+            _ => {
+                "cartaFianza"
+            }
         },
     };
 
+
+    /*
+     * IMPORTANTE:
+     *
+     * El endpoint Java hace esto:
+     *
+     * m.putAll(json);
+     * m.put(DataSource.class, m.remove("data"));
+     *
+     * Por eso los parámetros deben ir en el nivel raíz,
+     * NO dentro de "parameters".
+     */
     let output = json!({
 
-        "report": report_name,
+        "FORMAT": format,
 
-        "parameters": {
+        "FECHA_INI": fecha_ini
+            .map(|value| {
+                value
+                    .format("%d/%m/%Y")
+                    .to_string()
+            }),
 
-            "FORMAT": format,
+        "FECHA_FIN": fecha_fin
+            .map(|value| {
+                value
+                    .format("%d/%m/%Y")
+                    .to_string()
+            }),
 
-            "FECHA_INI": fecha_ini
-                .map(|value| value.format("%d/%m/%Y").to_string()),
+        "TITLE_REPORT": title_report,
 
-            "FECHA_FIN": fecha_fin
-                .map(|value| value.format("%d/%m/%Y").to_string()),
+        "danger": danger,
 
-            "TITLE_REPORT": title_report,
+        "order": order,
 
-            "danger": danger,
+        "group": group,
 
-            "order": order,
+        "option": option,
 
-            "group": group,
+        "IS_ONE_PAGE_PER_SHEET": false,
 
-            "option": option,
+        "SIGN_SECTION": true,
 
-            "IS_ONE_PAGE_PER_SHEET": false,
-
-            "SIGN_SECTION": true,
-
-            "rest": true
-        },
+        "rest": true,
 
         "data": result.data
     });
 
-    let content = serde_json::to_string_pretty(&output)
-        .map_err(|error| ApiError::BadRequest(format!("error serializando reporte: {error}")))?;
 
-    let filename = format!("{report_name}.json");
-
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-        .header(
-            header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{filename}\""),
+    /*
+     * Convertimos el JSON al contenido del archivo
+     * que será enviado como multipart.
+     */
+    let json_bytes =
+        serde_json::to_vec(
+            &output
         )
-        .body(Body::from(content))
-        .map_err(|error| ApiError::BadRequest(format!("error construyendo respuesta: {error}")))?;
+        .map_err(|error| {
+            ApiError::BadRequest(
+                format!(
+                    "error serializando reporte: {error}"
+                )
+            )
+        })?;
+
+
+    /*
+     * filename="warrant.json"
+     *
+     * Tu Java v2 lo recuperará del
+     * Content-Disposition de la parte file.
+     */
+    let file_part =
+        Part::bytes(
+            json_bytes
+        )
+        .file_name(
+            "warrant.json"
+        )
+        .mime_str(
+            "application/json"
+        )
+        .map_err(|error| {
+            ApiError::BadRequest(
+                format!(
+                    "error creando archivo multipart: {error}"
+                )
+            )
+        })?;
+
+
+    let output_filename =
+        format!(
+            "warrant.{format}"
+        );
+
+
+    let form =
+        Form::new()
+
+            .text(
+                "template",
+                report_name.to_string(),
+            )
+
+            .text(
+                "extension",
+                format.to_string(),
+            )
+
+            .text(
+                "output",
+                output_filename.clone(),
+            )
+
+            .part(
+                "file",
+                file_part,
+            );
+
+
+    /*
+     * Idealmente esta URL debería venir de
+     * configuración, no quedar hardcoded.
+     */
+    let jasper_url =
+        "http://localhost:1128/v2";
+
+
+    let client =
+        reqwest::Client::new();
+
+
+    let jasper_response =
+        client
+            .post(
+                jasper_url
+            )
+            .multipart(
+                form
+            )
+            .send()
+            .await
+            .map_err(|error| {
+                ApiError::BadRequest(
+                    format!(
+                        "error llamando servicio Jasper: {error}"
+                    )
+                )
+            })?;
+
+
+    /*
+     * Si Jasper respondió error, primero consumimos
+     * el mensaje para poder diagnosticarlo.
+     */
+    if !jasper_response
+        .status()
+        .is_success()
+    {
+
+        let status =
+            jasper_response
+                .status();
+
+
+        let body =
+            jasper_response
+                .text()
+                .await
+                .unwrap_or_default();
+
+
+        return Err(
+            ApiError::BadRequest(
+                format!(
+                    "Jasper respondió {status}: {body}"
+                )
+            )
+        );
+    }
+
+
+    /*
+     * Por ahora podemos consumir el resultado completo.
+     *
+     * Luego esto puede cambiarse a streaming.
+     */
+    let report_bytes =
+        jasper_response
+            .bytes()
+            .await
+            .map_err(|error| {
+                ApiError::BadRequest(
+                    format!(
+                        "error leyendo resultado Jasper: {error}"
+                    )
+                )
+            })?;
+
+
+    let response =
+        Response::builder()
+
+            .status(
+                StatusCode::OK
+            )
+
+            .header(
+                header::CONTENT_TYPE,
+                "application/octet-stream",
+            )
+
+            .header(
+                header::CONTENT_DISPOSITION,
+                format!(
+                    "attachment; filename=\"{output_filename}\""
+                ),
+            )
+
+            .body(
+                Body::from(
+                    report_bytes
+                )
+            )
+
+            .map_err(|error| {
+                ApiError::BadRequest(
+                    format!(
+                        "error construyendo respuesta: {error}"
+                    )
+                )
+            })?;
+
 
     Ok(response)
 }

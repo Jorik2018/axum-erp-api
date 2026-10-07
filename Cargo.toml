@@ -39,6 +39,11 @@ uuid = { version = "1.23.1", features = ["v4", "serde"] }
 
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 
-reqwest = { version = "0.12", features = ["json"] }
-
+reqwest = {
+    version = "0.12",
+    features = [
+        "json",
+        "multipart"
+    ]
+}
 thiserror = "2"
