@@ -31,6 +31,7 @@ pub fn warrant_routes() -> Router<Arc<AppState>> {
         .route("/notifications", get(notifications))
         .route("/{from}/{to}", get(list_range))
         .route("/{id}", get(find).put(update).delete(remove))
+        .route("/download", axum::routing::post(download_report))
 }
 
 async fn create_template(
@@ -93,6 +94,167 @@ async fn list(
     Query(filter): Query<WarrantFilter>,
 ) -> Result<Json<super::dto::PagedWarrants>, ApiError> {
     Ok(Json(repository::list(&state.db, &filter).await?))
+}
+
+async fn download_report(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Json(input): Json<Value>,
+) -> Result<impl IntoResponse, ApiError> {
+
+    require_tesoreria(&claims)?;
+
+
+    let format = input
+        .get("FORMAT")
+        .and_then(Value::as_str)
+        .unwrap_or("json");
+
+
+    let group = input
+        .get("group")
+        .and_then(|value| {
+            value
+                .as_str()
+                .and_then(|value| value.parse::<i32>().ok())
+                .or_else(|| value.as_i64().map(|value| value as i32))
+        })
+        .unwrap_or(0);
+
+
+    let option = input
+        .get("option")
+        .and_then(|value| {
+            value
+                .as_str()
+                .and_then(|value| value.parse::<i32>().ok())
+                .or_else(|| value.as_i64().map(|value| value as i32))
+        })
+        .unwrap_or(0);
+
+
+    let fecha_ini = input
+        .get("FECHA_INI")
+        .and_then(Value::as_str);
+
+
+    let fecha_fin = input
+        .get("FECHA_FIN")
+        .and_then(Value::as_str);
+
+
+    let danger = input
+        .get("danger")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+
+    let order = input
+        .get("order")
+        .and_then(Value::as_str);
+
+
+    let title_report = input
+        .get("TITLE_REPORT")
+        .and_then(Value::as_str)
+        .unwrap_or("REPORTE DE CARTAS FIANZAS");
+
+
+    /*
+     * Temporalmente usamos el repositorio normal.
+     *
+     * Aquí después podemos crear:
+     *
+     * repository::report(...)
+     *
+     * para reproducir exactamente:
+     *
+     * warrantFacade.load(0, 0, null, p)
+     */
+
+
+    let filter = WarrantFilter {
+        // Completar con los campos reales de WarrantFilter.
+        ..Default::default()
+    };
+
+
+    let result = repository::list(
+        &state.db,
+        &filter,
+    )
+    .await?;
+
+
+    /*
+     * Equivalente futuro aproximado a la selección
+     * del Jasper:
+     *
+     * option == 1:
+     *     cartaFianza_1
+     *
+     * group == 1:
+     *     cartaFianza_x_expediente
+     *
+     * group == 2:
+     *     cartaFianza_x_proveedor
+     */
+
+    let report_name = match group {
+        1 => "cartaFianza_x_expediente",
+        2 => "cartaFianza_x_proveedor",
+
+        _ => match option {
+            1 => "cartaFianza_1",
+            _ => "cartaFianza",
+        },
+    };
+
+
+    let output = json!({
+        "report": report_name,
+
+        "parameters": {
+            "FORMAT": format,
+            "FECHA_INI": fecha_ini,
+            "FECHA_FIN": fecha_fin,
+            "TITLE_REPORT": title_report,
+            "danger": danger,
+            "order": order,
+            "group": group,
+            "option": option,
+
+            "IS_ONE_PAGE_PER_SHEET": false,
+            "SIGN_SECTION": true,
+            "rest": true
+        },
+
+        "data": result.data
+    });
+
+
+    let content = serde_json::to_string_pretty(&output)
+        .map_err(|_| ApiError::InternalServerError)?;
+
+
+    let filename = format!("{report_name}.json");
+
+
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            header::CONTENT_TYPE,
+            "application/json; charset=utf-8",
+        )
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .body(Body::from(content))
+        .map_err(|_| ApiError::InternalServerError)?;
+
+
+    Ok(response)
 }
 
 async fn list_range(
