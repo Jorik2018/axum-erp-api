@@ -290,14 +290,6 @@ async fn download(
         .map_err(|error| {
             ApiError::BadRequest(format!("error llamando servicio Jasper: {error}"))
         })?;
-    let jasper_response = client
-        .post(&jasper_url)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|error| {
-            ApiError::BadRequest(format!("error llamando servicio Jasper: {error}"))
-        })?;
 
     /*
      * Si Jasper responde error sí consumimos el body
@@ -312,6 +304,13 @@ async fn download(
             "Jasper respondió {status}: {body}"
         )));
     }
+
+    let content_type = jasper_response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
 
     let content_disposition = jasper_response
         .headers()
@@ -328,7 +327,7 @@ async fn download(
      * Rust ya no carga todo el PDF/XLS en memoria.
      */
     /*no method named `bytes_stream` found for struct `reqwest::Response` in the current scope
-method not found in `reqwest::Response */
+    method not found in `reqwest::Response */
     let stream = jasper_response.bytes_stream();
 
     let body = Body::from_stream(stream);
