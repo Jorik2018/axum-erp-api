@@ -319,23 +319,22 @@ async fn download(
         .map(str::to_string)
         .unwrap_or_else(|| format!("attachment; filename=\"{output_filename}\""));
 
-    /*
-     * Streaming:
-     *
-     * Jasper -> reqwest -> Axum Body -> navegador
-     *
-     * Rust ya no carga todo el PDF/XLS en memoria.
-     */
-    /*no method named `bytes_stream` found for struct `reqwest::Response` in the current scope
-    method not found in `reqwest::Response */
+    let content_length = jasper_response.content_length();
+
     let stream = jasper_response.bytes_stream();
 
     let body = Body::from_stream(stream);
 
-    let response = Response::builder()
+    let mut builder = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::CONTENT_DISPOSITION, content_disposition)
+        .header(header::CONTENT_DISPOSITION, content_disposition);
+
+    if let Some(length) = content_length {
+        builder = builder.header(header::CONTENT_LENGTH, length);
+    }
+
+    let response = builder
         .body(body)
         .map_err(|error| ApiError::BadRequest(format!("error construyendo respuesta: {error}")))?;
 
